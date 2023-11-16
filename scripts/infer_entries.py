@@ -14,7 +14,8 @@ def parse_tar_header(header_bytes):
 
 def infer_entries_from_tarball(tarball_path, output_root):
     entries = []
-    entry_count = 0
+    file_index = 0
+    file_indices = {}  # store filenames with an index
     with open(tarball_path, 'rb') as f:
         while True:
             header_bytes = f.read(512)  # read header
@@ -22,23 +23,27 @@ def infer_entries_from_tarball(tarball_path, output_root):
                 break  # end of archive
 
             name, size = parse_tar_header(header_bytes)
-            if size == 0 and entry_count == 0:
+            if size == 0 and file_index == 0:
                 # skip first entry if empty
-                entry_count += 1
+                file_index += 1
                 continue
+
+            # add file name to the dictionary and use the index in entries
+            file_indices[file_index] = name
 
             start_offset = f.tell()
             end_offset = start_offset + size
 
-            entries.append([0, name, start_offset, end_offset])  # dummy class index 0
-            entry_count += 1
+            entries.append([0, file_index, start_offset, end_offset])  # dummy class index 0
+            file_index += 1
 
             f.seek(size, os.SEEK_CUR)  # Skip to the next header
             if size % 512 != 0:
                 f.seek(512 - (size % 512), os.SEEK_CUR)  # Adjust for padding
 
     # save entries
-    np.save(Path(output_root, "entries.npy"), np.array(entries, dtype=object))
+    np.save(Path(output_root, "entries.npy"), np.array(entries, dtype=np.uint64))
+    np.save(Path(output_root, "file_indices.npy"), file_indices)
 
 
 def main():

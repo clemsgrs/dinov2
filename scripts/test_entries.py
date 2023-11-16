@@ -15,14 +15,20 @@ def compare_files(original_path, extracted_data):
         original_data = f.read()
     return original_data == extracted_data
 
-def test_tarball_entries(image_root, tarball_path, entries_path, subset_size):
-    entries = np.load(entries_path, allow_pickle=True)
-    print(f"Randomly sampling {min(subset_size, len(entries))}/{len(entries)} images")
-    subset_entries = random.sample(list(entries), min(subset_size, len(entries)))
+def test_tarball_entries(image_root, tarball_path, entries_path, file_indices_path, subset_size):
+    entries = np.load(entries_path)
+    file_indices = np.load(file_indices_path, allow_pickle=True).item()
+
+    ntotal = len(entries)
+    nsample = min(subset_size, ntotal)
+    print(f"Randomly sampling {nsample}/{ntotal} images")
+    sampled_indices = random.sample(range(ntotal), nsample)
+    subset_entries = entries[sampled_indices]
 
     mismatch = 0
     for entry in subset_entries:
-        _, img_path, start_offset, end_offset = entry
+        _, img_idx, start_offset, end_offset = entry
+        img_path = file_indices[img_idx]
         img_name = Path(img_path).name
         original_path = Path(image_root, img_name)
         extracted_data = extract_file(tarball_path, start_offset, end_offset)
@@ -44,11 +50,12 @@ def main():
     parser.add_argument("-i", "--image_root", type=str, required=True, help="Path to the directory containing images.")
     parser.add_argument("-t", "--tarball_path", type=str, required=True, help="Path to the tarball file.")
     parser.add_argument("-e", "--entries_path", type=str, required=True, help="Path to the entries file.")
+    parser.add_argument("-f", "--file_indices_path", type=str, required=True, help="Path to the file_indices file.")
     parser.add_argument("-s", "--subset_size", type=int, default=1000, help="Number of images to test randomly.")
 
     args = parser.parse_args()
 
-    test_tarball_entries(args.image_root, args.tarball_path, args.entries_path, args.subset_size)
+    test_tarball_entries(args.image_root, args.tarball_path, args.entries_path, args.file_indices_path, args.subset_size)
 
 
 if __name__ == "__main__":

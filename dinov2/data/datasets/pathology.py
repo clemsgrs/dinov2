@@ -44,23 +44,25 @@ class PathologyDataset(VisionDataset):
         mmap_cache_size: int = _DEFAULT_MMAP_CACHE_SIZE,
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
-        self._entries = self._load_entries(Path(root,"entries.npy"))
-        self._mmap_tarball = _make_mmap_tarball(Path(root, "dataset.tar"), mmap_cache_size)
+        self._entries = self._load_entries(Path(root, "entries.npy"))
+        self._paths = np.load(Path(root, "file_indices.npy"), allow_pickle=True).item()
+        self._mmap_tarball = _make_mmap_tarball(Path(root, "dataset.tar"))
 
     def _load_entries(self, entries_path: str) -> np.ndarray:
         return np.load(entries_path, mmap_mode="r")
 
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
-        start_offset, end_offset = entry["start_offset"], entry["end_offset"]
+        file_idx, start_offset, end_offset = entry[1], entry[2], entry[3]
+        path = self._paths[file_idx]
         mapped_data = self._mmap_tarball[start_offset:end_offset]
-        data = mapped_data[512:]  # Skip entry header block
-        return data
+        return mapped_data, Path(path)
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         try:
-            image_data = self.get_image_data(index)
+            image_data, img_path = self.get_image_data(index)
             image = ImageDataDecoder(image_data).decode()
+            # image.save(f'/data/pathology/projects/ais-cap/clement/code/dinov2/tmp/{img_path.name}')
         except Exception as e:
             raise RuntimeError(f"Cannot read image for sample {index}") from e
 
