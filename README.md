@@ -31,7 +31,7 @@ You need to organize data in a tarball file:
     tar -cvf dataset.tar /path/to/image/folder
     ```
 
-3. infer the auxiliary file `entries.npy`
+3. infer the auxiliary files `entries.npy` and `file_indices.npy`
 
     ```shell
     python3 scripts/infer_entries.py \
@@ -39,10 +39,12 @@ You need to organize data in a tarball file:
       --output_root /path/to/output/folder
     ```
 
-    This file will record:
+    The `entries.npy` file will record:
     - a dummy class index (we set it to 0 for all images since we’re not using classes)
+    - a unique filename index for each image
     - the start and end offsets of each image within the tarball file
-    - the filename of each image
+
+    The `file_indices.npy` file consists in a dictionnary mapping filename index to corresponding filename (as a string).
 
 4. (optional) doublecheck the `entries.npy` file matches the tarball file
 
@@ -50,7 +52,8 @@ You need to organize data in a tarball file:
     python3 scripts/test_entries.py \
       --image_root /path/to/image/folder \
       --tarball_path /path/to/dataset.tar \
-      --entries_path /path/to/entries.npy
+      --entries_path /path/to/entries.npy \
+      --file_indices_path /path/to/file_indices.npy
     ```
 
 
