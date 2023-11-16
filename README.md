@@ -39,14 +39,33 @@ pip install -r requirements.txt -r requirements-extras.txt
 You need to organize data in a tarball file:
 
 1. ensure images are all in one directory
-2. create a single large tarball file that contains all images : `tar -cvf dataset.tar /path/to/image/folder`
-3. infer the auxiliary file `entries.npy` : `python3 infer_entries.py --tarball_path /path/to/dataset.tar --output_root /path/to/output/folder`
-4. (optional) doublecheck the `entries.npy` file matches the tarball file : `python3 test_entries.py --image_root /path/to/image/folder --tarball_path /path/to/dataset.tar --entries_path /path/to/entries.npy`
+2. create a single large tarball file that contains all images
 
-The auxiliary `entries.npy` file will record:
-- a dummy class index (we set it to 0 for all images since we’re not using classes)
-- the start and end offsets of each image within the tarball file
-- the filename of each image
+    ```shell
+    tar -cvf dataset.tar /path/to/image/folder
+    ```
+
+3. infer the auxiliary file `entries.npy`
+
+    ```shell
+    python3 infer_entries.py \
+      --tarball_path /path/to/dataset.tar \
+      --output_root /path/to/output/folder
+    ```
+
+    This file will record:
+    - a dummy class index (we set it to 0 for all images since we’re not using classes)
+    - the start and end offsets of each image within the tarball file
+    - the filename of each image
+
+4. (optional) doublecheck the `entries.npy` file matches the tarball file
+
+    ```shell
+    python3 test_entries.py \
+      --image_root /path/to/image/folder \
+      --tarball_path /path/to/dataset.tar \
+      --entries_path /path/to/entries.npy
+    ```
 
 
 <br />
