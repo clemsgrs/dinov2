@@ -8,6 +8,8 @@ import datetime
 import json
 import logging
 import time
+import sys
+import tqdm
 
 import torch
 
@@ -63,7 +65,7 @@ class MetricLogger(object):
             f.write(json.dumps(dict_to_dump) + "\n")
         pass
 
-    def log_every(self, iterable, print_freq, header=None, n_iterations=None, start_iteration=0):
+    def log_every(self, iterable, print_freq, gpu_id, header=None, n_iterations=None, start_iteration=0, print_log: bool = False):
         i = start_iteration
         if not header:
             header = ""
@@ -90,11 +92,24 @@ class MetricLogger(object):
 
         log_msg = self.delimiter.join(log_list)
         MB = 1024.0 * 1024.0
-        for obj in iterable:
+
+        tqdm_iterable = tqdm.tqdm(
+            iterable,
+            desc=(f"{header}"),
+            unit=" img",
+            ncols=80,
+            unit_scale=iterable.batch_size,
+            total=n_iterations,
+            leave=False,
+            file=sys.stdout,
+            disable=not (gpu_id in [-1, 0]),
+        )
+
+        for obj in tqdm_iterable:
             data_time.update(time.time() - end)
             yield obj
             iter_time.update(time.time() - end)
-            if i % print_freq == 0 or i == n_iterations - 1:
+            if (i % print_freq == 0 or i == n_iterations - 1) and print_log:
                 self.dump_in_output_file(iteration=i, iter_time=iter_time.avg, data_time=data_time.avg)
                 eta_seconds = iter_time.global_avg * (n_iterations - i)
                 eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))

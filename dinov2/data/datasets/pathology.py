@@ -45,7 +45,7 @@ class PathologyDataset(VisionDataset):
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
         self._entries = self._load_entries(Path(root, "entries.npy"))
-        self._paths = np.load(Path(root, "file_indices.npy"), allow_pickle=True).item()
+        self._filepaths = np.load(Path(root, "file_indices.npy"), allow_pickle=True).item()
         self._mmap_tarball = _make_mmap_tarball(Path(root, "dataset.tar"))
 
     def _load_entries(self, entries_path: str) -> np.ndarray:
@@ -54,9 +54,9 @@ class PathologyDataset(VisionDataset):
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
         file_idx, start_offset, end_offset = entry[1], entry[2], entry[3]
-        path = self._paths[file_idx]
+        filepath = self._filepaths[file_idx]
         mapped_data = self._mmap_tarball[start_offset:end_offset]
-        return mapped_data, Path(path)
+        return mapped_data, Path(filepath)
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         try:

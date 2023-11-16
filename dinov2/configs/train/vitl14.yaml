@@ -25,3 +25,12 @@ optim:
   layerwise_decay: 1.0
 crops:
   local_crops_size: 98
+wandb:
+  enable: True
+  project: 'vision'
+  username: 'vlfm'
+  exp_name: 'dinov2'
+  tags: ['dinov2']
+  dir: '/home/user'
+  group:
+  resume_id:

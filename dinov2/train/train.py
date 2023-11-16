@@ -7,7 +7,11 @@ import argparse
 import logging
 import math
 import os
+import wandb
+import datetime
 from functools import partial
+from typing import Optional
+from pathlib import Path
 
 from fvcore.common.checkpoint import PeriodicCheckpointer
 import torch
@@ -18,7 +22,7 @@ import dinov2.distributed as distributed
 from dinov2.fsdp import FSDPCheckpointer
 from dinov2.logging import MetricLogger
 from dinov2.utils.config import setup
-from dinov2.utils.utils import CosineScheduler
+from dinov2.utils.utils import CosineScheduler, initialize_wandb, is_main_process
 
 from dinov2.train.ssl_meta_arch import SSLMetaArch
 
@@ -119,6 +123,16 @@ def apply_optim_scheduler(optimizer, lr, wd, last_layer_lr):
         param_group["lr"] = (last_layer_lr if is_last_layer else lr) * lr_multiplier
 
 
+def update_log_dict(
+    log_dict,
+    name,
+    value,
+    step: Optional[str] = "step",
+):
+    wandb.define_metric(f"{name}", step_metric=step)
+    log_dict.update({f"{name}": value})
+
+
 def do_test(cfg, model, iteration):
     new_state_dict = model.teacher.state_dict()
 
@@ -131,7 +145,7 @@ def do_test(cfg, model, iteration):
         torch.save({"teacher": new_state_dict}, teacher_ckp_path)
 
 
-def do_train(cfg, model, resume=False):
+def do_train(cfg, model, gpu_id, resume=False):
     model.train()
     inputs_dtype = torch.half
     fp16_scaler = model.fp16_scaler  # for mixed precision training
@@ -222,6 +236,7 @@ def do_train(cfg, model, resume=False):
     for data in metric_logger.log_every(
         data_loader,
         10,
+        gpu_id,
         header,
         max_iter,
         start_iter,
@@ -282,6 +297,18 @@ def do_train(cfg, model, resume=False):
         metric_logger.update(current_batch_size=current_batch_size)
         metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
 
+        # log at the end of each epoch
+        if (iteration + 1) % OFFICIAL_EPOCH_LENGTH == 0:
+
+            # log the total loss and each individual loss to wandb
+            log_dict = {"epoch": (iteration + 1) // OFFICIAL_EPOCH_LENGTH}
+            update_log_dict(log_dict, f'{header.lower()}/lr', lr, step="epoch")
+            update_log_dict(log_dict, f'{header.lower()}/wd', wd, step="epoch")
+            update_log_dict(log_dict, f'{header.lower()}/loss', losses_reduced, step="epoch")
+            for loss_name, loss_value in loss_dict.items():
+                update_log_dict(log_dict, f'{header.lower()}/{loss_name}', loss_value, step="epoch")
+            wandb.log(log_dict)
+
         # checkpointing and testing
 
         if cfg.evaluation.eval_period_iterations > 0 and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0:
@@ -290,12 +317,47 @@ def do_train(cfg, model, resume=False):
         periodic_checkpointer.step(iteration)
 
         iteration = iteration + 1
+
+    # gather stats from all processes
     metric_logger.synchronize_between_processes()
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    train_stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    return train_stats
 
 
 def main(args):
     cfg = setup(args)
+
+    distributed = torch.cuda.device_count() > 1
+    if distributed:
+        torch.distributed.init_process_group(backend="nccl")
+        gpu_id = int(os.environ["LOCAL_RANK"])
+        if gpu_id == 0:
+            print(f"Distributed session successfully initialized")
+    else:
+        gpu_id = -1
+
+    if is_main_process():
+        print(f"torch.cuda.device_count(): {torch.cuda.device_count()}")
+        run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M")
+        # set up wandb
+        if cfg.wandb.enable:
+            key = os.environ.get("WANDB_API_KEY")
+            wandb_run = initialize_wandb(cfg, key=key)
+            wandb_run.define_metric("epoch", summary="max")
+            run_id = wandb_run.id
+    else:
+        run_id = ""
+
+    if distributed:
+        obj = [run_id]
+        torch.distributed.broadcast_object_list(
+            obj, 0, device=torch.device(f"cuda:{gpu_id}")
+        )
+        run_id = obj[0]
+
+    output_dir = Path(cfg.train.output_dir, run_id)
+    output_dir.mkdir(exist_ok=True, parents=True)
+    cfg.train.output_dir = str(output_dir)
 
     model = SSLMetaArch(cfg).to(torch.device("cuda"))
     model.prepare_for_distributed_training()
@@ -310,7 +372,7 @@ def main(args):
         )
         return do_test(cfg, model, f"manual_{iteration}")
 
-    do_train(cfg, model, resume=not args.no_resume)
+    do_train(cfg, model, gpu_id, resume=not args.no_resume)
 
 
 if __name__ == "__main__":

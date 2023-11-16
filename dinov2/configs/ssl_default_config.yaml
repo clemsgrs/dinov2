@@ -116,3 +116,12 @@ crops:
   local_crops_size: 96
 evaluation:
   eval_period_iterations: 12500
+wandb:
+  enable: False
+  project: ''
+  username: ''
+  exp_name: ''
+  tags:
+  dir: '/home/user'
+  group:
+  resume_id:
