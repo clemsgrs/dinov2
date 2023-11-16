@@ -48,7 +48,7 @@ You need to organize data in a tarball file:
 3. infer the auxiliary file `entries.npy`
 
     ```shell
-    python3 infer_entries.py \
+    python3 scripts/infer_entries.py \
       --tarball_path /path/to/dataset.tar \
       --output_root /path/to/output/folder
     ```
@@ -61,7 +61,7 @@ You need to organize data in a tarball file:
 4. (optional) doublecheck the `entries.npy` file matches the tarball file
 
     ```shell
-    python3 test_entries.py \
+    python3 scripts/test_entries.py \
       --image_root /path/to/image/folder \
       --tarball_path /path/to/dataset.tar \
       --entries_path /path/to/entries.npy
