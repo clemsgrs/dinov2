@@ -6,7 +6,7 @@ ibot:
   head_n_prototypes: 131072
 train:
   batch_size_per_gpu: 32
-  dataset_path: Pathology:root=/data/pathology/projects/ais-cap/dataset/leander_patches
+  dataset_path: Pathology:root=/root/data
   centering: sinkhorn_knopp
   num_workers: 4
 student:
