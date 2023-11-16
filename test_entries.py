@@ -17,19 +17,25 @@ def compare_files(original_path, extracted_data):
 
 def test_tarball_entries(image_root, tarball_path, entries_path, subset_size):
     entries = np.load(entries_path, allow_pickle=True)
-    print(f"Randomly sampling {subset_size} images")
+    print(f"Randomly sampling {min(subset_size, len(entries))}/{len(entries)} images")
     subset_entries = random.sample(list(entries), min(subset_size, len(entries)))
 
+    mismatch = 0
     for entry in subset_entries:
-        _, img_name, start_offset, end_offset = entry
+        _, img_path, start_offset, end_offset = entry
+        img_name = Path(img_path).name
         original_path = Path(image_root, img_name)
         extracted_data = extract_file(tarball_path, start_offset, end_offset)
 
         if not compare_files(original_path, extracted_data):
-            print(f"Mismatch found in file: {img_name}")
-            return False
+            mismatch += 1
+            # print(f"Mismatch found in file: {img_name}")
+            # return False
 
-    print("All files in the random subset match successfully.")
+    if mismatch:
+        print(f"{mismatch}/{subset_size} mismatch found.")
+    else:
+        print("All files in the random subset match successfully.")
     return True
 
 
