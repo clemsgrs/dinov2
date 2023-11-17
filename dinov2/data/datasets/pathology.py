@@ -8,22 +8,16 @@ from torchvision.datasets import VisionDataset
 
 from .decoders import ImageDataDecoder
 
-_DEFAULT_MMAP_CACHE_SIZE = 16  # Warning: This can exhaust file descriptors
 
+class _Fold(Enum):
+    FOLD_0 = "0"
+    FOLD_1 = "1"
+    FOLD_2 = "2"
+    FOLD_3 = "3"
+    FOLD_4 = "4"
 
-class _Split(Enum):
-    TRAIN = "train"
-    VAL = "val"
-
-    @property
-    def length(self) -> int:
-        return {
-            _Split.TRAIN: 11_797_647,
-            _Split.VAL: 561_050,
-        }[self]
-
-    def entries_path(self):
-        return f"imagenet21kp_{self.value}.txt"
+    def entries_name(self):
+        return f"entries_{self.value}.npy"
 
 
 def _make_mmap_tarball(tarball_path: str) -> mmap:
@@ -34,21 +28,36 @@ def _make_mmap_tarball(tarball_path: str) -> mmap:
 
 class PathologyDataset(VisionDataset):
 
+    Fold = _Fold
+
     def __init__(
         self,
         *,
         root: str,
+        fold: Optional["PathologyDataset.Fold"] = None,
         transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
-        mmap_cache_size: int = _DEFAULT_MMAP_CACHE_SIZE,
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
-        self._entries = self._load_entries(Path(root, "entries.npy"))
+        self._fold = fold
+        self._get_entries()
         self._filepaths = np.load(Path(root, "file_indices.npy"), allow_pickle=True).item()
         self._mmap_tarball = _make_mmap_tarball(Path(root, "dataset.tar"))
 
-    def _load_entries(self, entries_path: str) -> np.ndarray:
+    @property
+    def fold(self) -> "PathologyDataset.Fold":
+        return self._fold
+
+    @property
+    def _entries_name(self) -> str:
+        return self._fold.entries_name() if self._fold else "entries.npy"
+
+    def _get_entries(self) -> np.ndarray:
+        self._entries = self._load_entries(self._entries_name)
+
+    def _load_entries(self, _entries_name: str) -> np.ndarray:
+        entries_path = Path(self.root, _entries_name)
         return np.load(entries_path, mmap_mode="r")
 
     def get_image_data(self, index: int) -> bytes:

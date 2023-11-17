@@ -10,8 +10,8 @@ train:
   centering: sinkhorn_knopp
   num_workers: 4
 student:
-  arch: vit_large
-  patch_size: 14
+  arch: vit_small
+  patch_size: 16
   drop_path_rate: 0.4
   ffn_layer: swiglufused
   block_chunks: 4
@@ -30,7 +30,7 @@ wandb:
   project: 'vision'
   username: 'vlfm'
   exp_name: 'dinov2'
-  tags: ['dinov2']
+  tags: ['dinov2', 'vit_small']
   dir: '/home/user'
   group:
   resume_id:
