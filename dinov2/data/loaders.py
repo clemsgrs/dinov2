@@ -49,7 +49,7 @@ def _parse_dataset_str(dataset_str: str):
 
     for token in tokens[1:]:
         key, value = token.split("=")
-        assert key in ("root", "extra", "split")
+        assert key in ("root", "extra", "split", "fold")
         kwargs[key] = value
 
     if name == "ImageNet":
@@ -60,6 +60,8 @@ def _parse_dataset_str(dataset_str: str):
         class_ = ImageNet22k
     elif name == "Pathology":
         class_ = PathologyDataset
+        if "fold" in kwargs:
+            kwargs["fold"] = PathologyDataset.Fold[kwargs["fold"]]
     else:
         raise ValueError(f'Unsupported dataset "{name}"')
 

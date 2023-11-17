@@ -109,5 +109,8 @@ Update `dinov2/configs/train/vits16.yaml` and run:
 ```shell
 python dinov2/train/train.py \
     --config-file dinov2/configs/train/vits16.yaml \
-    --output-dir <PATH/TO/OUTPUT/DIR>
+    --output-dir <PATH/TO/OUTPUT/DIR> \
+    train.dataset_path=Pathology:root=<PATH/TO/DATASET>:fold=<FOLD_INDEX>
 ```
+
+Leave out `:fold=<FOLD_INDEX>` if you didn't setup multiple folds when preparing data.
