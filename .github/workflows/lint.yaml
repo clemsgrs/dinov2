@@ -21,10 +21,10 @@ jobs:
         with:
           python-version: 3.9
           cache: 'pip'
-          cache-dependency-path: '**/requirements*.txt'
+          cache-dependency-path: '**/lint*.txt'
       - name: Install Python (development) dependencies
         run: |
-          pip install -r requirements-dev.txt
+          pip install -r lint.txt
       - name: Run flake8
         run: |
           flake8
