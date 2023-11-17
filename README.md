@@ -20,8 +20,6 @@ conda activate dinov2-extras
 
 ## Data preparation
 
-### Pathology Dataset
-
 You need to organize data in a tarball file:
 
 1. ensure images are all in one directory
@@ -30,6 +28,8 @@ You need to organize data in a tarball file:
     ```shell
     tar -cvf dataset.tar /path/to/image/folder
     ```
+
+### Single Fold
 
 3. infer the auxiliary files `entries.npy` and `file_indices.npy`
 
@@ -44,7 +44,7 @@ You need to organize data in a tarball file:
     - a unique filename index for each image
     - the start and end offsets of each image within the tarball file
 
-    The `file_indices.npy` file consists in a dictionnary mapping filename index to corresponding filename (as a string).
+    The `file_indices.npy` file consists in a dictionnary mapping filename index to corresponding filename.
 
 4. (optional) doublecheck the `entries.npy` file matches the tarball file
 
@@ -56,6 +56,41 @@ You need to organize data in a tarball file:
       --file_indices_path /path/to/file_indices.npy
     ```
 
+### Multiple Folds
+
+For each individual fold `i`, repeat the following steps:
+
+  3. dump the image filepaths of the fold in a `.txt` file (e.g. `fold_i.txt`)
+
+  4. infer the corresponding auxiliary files `entries_i.npy`
+
+      ```shell
+      python3 scripts/infer_entries.py \
+        --tarball_path /path/to/dataset.tar \
+        --output_root /path/to/output/folder \
+        --restrict /path/to/fold_0.txt \
+        --suffix 0
+      ```
+
+      The `entries_i.npy` file will record:
+      - a dummy class index (we set it to 0 for all images since we’re not using classes)
+      - a unique filename index for each image listed in `fold_i.txt`
+      - the start and end offsets of each image within the tarball file
+
+      A generic `file_indices.npy` file will be saved the first time you run this command.<br>
+      It consists in a dictionnary mapping filename index to corresponding filename for the entire tarball file.
+
+  4. (optional) doublecheck the `entries_i.npy` file matches the tarball file
+
+      ```shell
+      python3 scripts/test_entries.py \
+        --image_root /path/to/image/folder \
+        --tarball_path /path/to/dataset.tar \
+        --entries_path /path/to/entries_i.npy \
+        --file_indices_path /path/to/file_indices.npy
+      ```
+
+In the end, this will have created one entries file per fold, which will get dynamically loaded during pretraining.
 
 <br />
 
