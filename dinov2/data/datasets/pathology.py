@@ -46,7 +46,6 @@ def _make_mmap_tarball(tarball_path: str) -> mmap:
 
 
 class PathologyDataset(VisionDataset):
-
     Fold = _Fold
 
     def __init__(
@@ -105,7 +104,6 @@ class PathologyDataset(VisionDataset):
 
 
 class KNNDataset(ExtendedVisionDataset):
-
     Split = _Split
     Labels = _Labels
 

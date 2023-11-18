@@ -235,7 +235,6 @@ def do_tune(
 
 
 def do_train(cfg, model, gpu_id, resume=False):
-
     model.train()
     inputs_dtype = torch.half
     fp16_scaler = model.fp16_scaler  # for mixed precision training
@@ -323,7 +322,6 @@ def do_train(cfg, model, gpu_id, resume=False):
     # setup tuning data
 
     if cfg.tune.tune_every:
-
         tokens = cfg.train.dataset_path.split(":")
         kwargs = {}
         for token in tokens[1:]:
@@ -433,25 +431,21 @@ def do_train(cfg, model, gpu_id, resume=False):
 
         # log at the end of each epoch
         if iteration % OFFICIAL_EPOCH_LENGTH == 0:
-
             # log the total loss and each individual loss to wandb
             log_dict = {"epoch": epoch}
-            update_log_dict(log_dict, f'{header.lower()}/lr', lr, step="epoch")
-            update_log_dict(log_dict, f'{header.lower()}/wd', wd, step="epoch")
-            update_log_dict(log_dict, f'{header.lower()}/loss', losses_reduced, step="epoch")
+            update_log_dict(log_dict, f"{header.lower()}/lr", lr, step="epoch")
+            update_log_dict(log_dict, f"{header.lower()}/wd", wd, step="epoch")
+            update_log_dict(log_dict, f"{header.lower()}/loss", losses_reduced, step="epoch")
             for loss_name, loss_value in loss_dict.items():
-                update_log_dict(log_dict, f'{header.lower()}/{loss_name}', loss_value, step="epoch")
+                update_log_dict(log_dict, f"{header.lower()}/{loss_name}", loss_value, step="epoch")
 
             # optionally run tuning
             # only run tuning on rank 0, otherwise one has to take care of gathering knn metrics from multiple gpus
             tune_results = None
-            if (
-                cfg.tune.tune_every
-                and epoch % cfg.tune.tune_every == 0
-            ):
+            if cfg.tune.tune_every and epoch % cfg.tune.tune_every == 0:
                 tune_results = do_tune(
                     cfg,
-                    epoch+1,
+                    epoch + 1,
                     model,
                     train_dataset,
                     val_dataset,
@@ -461,7 +455,7 @@ def do_train(cfg, model, gpu_id, resume=False):
                 if distributed.is_main_process():
                     for model_name, metrics_dict in tune_results.items():
                         for name, value in metrics_dict.items():
-                            update_log_dict(log_dict, f'tune/{model_name}.{name}', value, step="epoch")
+                            update_log_dict(log_dict, f"tune/{model_name}.{name}", value, step="epoch")
 
         if distributed.is_main_process():
             early_stopper(epoch, tune_results, checkpointer, iteration, k=cfg.tune.knn.nb_knn[0])
@@ -502,7 +496,7 @@ def main(args):
         torch.distributed.init_process_group(backend="nccl")
         gpu_id = int(os.environ["LOCAL_RANK"])
         if gpu_id == 0:
-            print(f"Distributed session successfully initialized")
+            print("Distributed session successfully initialized")
     else:
         gpu_id = -1
 
@@ -520,9 +514,7 @@ def main(args):
 
     if distributed:
         obj = [run_id]
-        torch.distributed.broadcast_object_list(
-            obj, 0, device=torch.device(f"cuda:{gpu_id}")
-        )
+        torch.distributed.broadcast_object_list(obj, 0, device=torch.device(f"cuda:{gpu_id}"))
         run_id = obj[0]
 
     output_dir = Path(cfg.train.output_dir, run_id)

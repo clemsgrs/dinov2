@@ -64,7 +64,6 @@ class AdaptivePadding(nn.Module):
     """
 
     def __init__(self, kernel_size=1, stride=1, dilation=1, padding="corner"):
-
         super(AdaptivePadding, self).__init__()
 
         assert padding in ("same", "corner")
@@ -400,7 +399,6 @@ class DetrTransformerDecoder(TransformerLayerSequence):
     """
 
     def __init__(self, *args, post_norm_cfg=dict(type="LN"), return_intermediate=False, **kwargs):
-
         super(DetrTransformerDecoder, self).__init__(*args, **kwargs)
         self.return_intermediate = return_intermediate
         if post_norm_cfg is not None:
@@ -524,7 +522,6 @@ class DeformableDetrTransformerDecoder(TransformerLayerSequence):
     """
 
     def __init__(self, *args, return_intermediate=False, **kwargs):
-
         super(DeformableDetrTransformerDecoder, self).__init__(*args, **kwargs)
         self.return_intermediate = return_intermediate
 

@@ -65,7 +65,9 @@ class MetricLogger(object):
             f.write(json.dumps(dict_to_dump) + "\n")
         pass
 
-    def log_every(self, iterable, print_freq, gpu_id, header=None, n_iterations=None, start_iteration=0, print_log: bool = False):
+    def log_every(
+        self, iterable, print_freq, gpu_id, header=None, n_iterations=None, start_iteration=0, print_log: bool = False
+    ):
         i = start_iteration
         if not header:
             header = ""

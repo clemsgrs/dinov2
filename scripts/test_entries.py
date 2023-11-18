@@ -6,14 +6,16 @@ from pathlib import Path
 
 
 def extract_file(tarball_path, start_offset, end_offset):
-    with open(tarball_path, 'rb') as f:
+    with open(tarball_path, "rb") as f:
         f.seek(start_offset)
         return f.read(end_offset - start_offset)
 
+
 def compare_files(original_path, extracted_data):
-    with open(original_path, 'rb') as f:
+    with open(original_path, "rb") as f:
         original_data = f.read()
     return original_data == extracted_data
+
 
 def test_tarball_entries(image_root, tarball_path, entries_path, file_indices_path, subset_size):
     entries = np.load(entries_path)
@@ -46,7 +48,9 @@ def test_tarball_entries(image_root, tarball_path, entries_path, file_indices_pa
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Test if tarball and entries files were created correctly for pretraining dataset.")
+    parser = argparse.ArgumentParser(
+        description="Test if tarball and entries files were created correctly for pretraining dataset."
+    )
     parser.add_argument("-i", "--image_root", type=str, required=True, help="Path to the directory containing images.")
     parser.add_argument("-t", "--tarball_path", type=str, required=True, help="Path to the tarball file.")
     parser.add_argument("-e", "--entries_path", type=str, required=True, help="Path to the entries file.")
@@ -55,9 +59,10 @@ def main():
 
     args = parser.parse_args()
 
-    test_tarball_entries(args.image_root, args.tarball_path, args.entries_path, args.file_indices_path, args.subset_size)
+    test_tarball_entries(
+        args.image_root, args.tarball_path, args.entries_path, args.file_indices_path, args.subset_size
+    )
 
 
 if __name__ == "__main__":
-
     main()

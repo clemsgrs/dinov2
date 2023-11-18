@@ -62,9 +62,7 @@ def build_auc_metric(num_classes: int):
     task = "binary"
     if num_classes > 2:
         task = "multiclass"
-    metrics: Dict[str, Metric] = {
-        f"auc": AUROC(task)
-    }
+    metrics: Dict[str, Metric] = {"auc": AUROC(task)}
     return MetricCollection(metrics)
 
 

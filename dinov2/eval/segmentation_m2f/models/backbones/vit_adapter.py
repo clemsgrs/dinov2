@@ -39,7 +39,6 @@ class ViTAdapter(TIMMVisionTransformer):
         *args,
         **kwargs
     ):
-
         super().__init__(num_heads=num_heads, pretrained=pretrained, with_cp=with_cp, *args, **kwargs)
         if freeze_vit:
             for param in self.parameters():

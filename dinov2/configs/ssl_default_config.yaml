@@ -74,7 +74,7 @@ tune:
   train_csv: ''
   test_csv: ''
   early_stopping:
-    enable: true
+    enable: false
     tracking: "auc_20"
     min_max: "max"
     patience: 20
@@ -135,7 +135,7 @@ crops:
 evaluation:
   eval_period_iterations: 12500
 wandb:
-  enable: False
+  enable: false
   project: ''
   username: ''
   exp_name: ''

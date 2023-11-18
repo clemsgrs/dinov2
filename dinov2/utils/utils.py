@@ -170,7 +170,7 @@ def initialize_wandb(
 ):
     command = f"wandb login {key}"
     subprocess.call(command, shell=True)
-    if cfg.wandb.tags == None:
+    if cfg.wandb.tags is None:
         tags = []
     else:
         tags = [str(t) for t in cfg.wandb.tags]
