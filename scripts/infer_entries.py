@@ -1,4 +1,5 @@
 import os
+import tqdm
 import argparse
 import numpy as np
 
@@ -23,6 +24,9 @@ def infer_entries_from_tarball(
     entries = []
     file_index = 0
     file_indices = {}  # store filenames with an index
+
+    total_size = os.path.getsize(tarball_path)
+    progress_bar = tqdm.tqdm(total=total_size, desc="Reading Tarball")
 
     # convert restrict filepaths to a set for efficient lookup, if provided
     restrict_filepaths = set(restrict_filepaths) if restrict_filepaths else None
@@ -52,15 +56,24 @@ def infer_entries_from_tarball(
             f.seek(size, os.SEEK_CUR)  # skip to the next header
             if size % 512 != 0:
                 f.seek(512 - (size % 512), os.SEEK_CUR)  # adjust for padding
+            progress_bar.update(512 + size + (512 - (size % 512) if size % 512 != 0 else 0))
 
     # save entries
-    entries_filepath = (
-        Path(output_root, f"{prefix}_entries_{suffix}.npy") if suffix else Path(output_root, "entries.npy")
-    )
+    if prefix:
+        if suffix:
+            entries_filepath = Path(output_root, f"{prefix}_entries_{suffix}.npy")
+        else:
+            entries_filepath = Path(output_root, f"{prefix}_entries.npy")
+    elif suffix:
+        entries_filepath = Path(output_root, f"entries_{suffix}.npy")
+    else:
+        entries_filepath = Path(output_root, "entries.npy")
     np.save(entries_filepath, np.array(entries, dtype=np.uint64))
 
     # optionally save file indices
-    file_indices_filepath = Path(output_root, f"{prefix}_file_indices.npy")
+    file_indices_filepath = (
+        Path(output_root, f"{prefix}_file_indices.npy") if prefix else Path(output_root, "file_indices.npy")
+    )
     if not file_indices_filepath.exists():
         np.save(file_indices_filepath, file_indices)
 
@@ -88,7 +101,7 @@ def main():
         with open(args.restrict, "r") as f:
             restrict_filepaths = [line.strip() for line in f]
 
-    prefix = f"{args.prefix}" if args.suffix else None
+    prefix = f"{args.prefix}" if args.prefix else None
     suffix = f"{args.suffix}" if args.restrict and args.suffix else None
 
     infer_entries_from_tarball(args.tarball_path, args.output_root, restrict_filepaths, prefix, suffix)
