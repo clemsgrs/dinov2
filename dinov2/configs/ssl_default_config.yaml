@@ -68,6 +68,24 @@ train:
   OFFICIAL_EPOCH_LENGTH: 1250
   cache_dataset: true
   centering: "centering" # or "sinkhorn_knopp"
+  save_every: 3
+tune:
+  tune_every: 1
+  train_csv: ''
+  test_csv: ''
+  early_stopping:
+    enable: true
+    tracking: "auc_20"
+    min_max: "max"
+    patience: 20
+    min_epoch: 30
+  knn:
+    nb_knn: [10, 20, 100, 200]
+    temperature: 0.07
+    batch_size: 256
+    n_per_class_list: [-1]
+    n_tries: 1
+    gather-on-cpu: false
 student:
   arch: vit_large
   patch_size: 16

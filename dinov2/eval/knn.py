@@ -7,17 +7,16 @@ import argparse
 from functools import partial
 import json
 import logging
-import os
 import sys
+from pathlib import Path
 from typing import List, Optional
 
 import torch
 from torch.nn.functional import one_hot, softmax
 
 import dinov2.distributed as distributed
-from dinov2.data import SamplerType, make_data_loader, make_dataset
-from dinov2.data.transforms import make_classification_eval_transform
-from dinov2.eval.metrics import AccuracyAveraging, build_topk_accuracy_metric
+from dinov2.data import SamplerType, make_data_loader
+from dinov2.eval.metrics import AccuracyAveraging, build_metric
 from dinov2.eval.setup import get_args_parser as get_setup_args_parser
 from dinov2.eval.setup import setup_and_build_model
 from dinov2.eval.utils import ModelWithNormalize, evaluate, extract_features
@@ -273,7 +272,7 @@ def eval_knn(
         persistent_workers=True,
     )
     num_classes = train_labels.max() + 1
-    metric_collection = build_topk_accuracy_metric(accuracy_averaging, num_classes=num_classes)
+    metric_collection = build_metric(num_classes=num_classes, average_type=accuracy_averaging)
 
     device = torch.cuda.current_device()
     partial_module = partial(KnnModule, T=temperature, device=device, num_classes=num_classes)
@@ -318,29 +317,18 @@ def eval_knn(
 def eval_knn_with_model(
     model,
     output_dir,
-    train_dataset_str="ImageNet:split=TRAIN",
-    val_dataset_str="ImageNet:split=VAL",
+    train_dataset,
+    val_dataset,
     nb_knn=(10, 20, 100, 200),
     temperature=0.07,
     autocast_dtype=torch.float,
     accuracy_averaging=AccuracyAveraging.MEAN_ACCURACY,
-    transform=None,
     gather_on_cpu=False,
     batch_size=256,
     num_workers=5,
     n_per_class_list=[-1],
     n_tries=1,
 ):
-    transform = transform or make_classification_eval_transform()
-
-    train_dataset = make_dataset(
-        dataset_str=train_dataset_str,
-        transform=transform,
-    )
-    val_dataset = make_dataset(
-        dataset_str=val_dataset_str,
-        transform=transform,
-    )
 
     with torch.cuda.amp.autocast(dtype=autocast_dtype):
         results_dict_knn = eval_knn(
@@ -360,13 +348,13 @@ def eval_knn_with_model(
     results_dict = {}
     if distributed.is_main_process():
         for knn_ in results_dict_knn.keys():
-            top1 = results_dict_knn[knn_]["top-1"].item() * 100.0
-            top5 = results_dict_knn[knn_]["top-5"].item() * 100.0
-            results_dict[f"{knn_} Top 1"] = top1
-            results_dict[f"{knn_} Top 5"] = top5
-            logger.info(f"{knn_} classifier result: Top1: {top1:.2f} Top5: {top5:.2f}")
+            acc = results_dict_knn[knn_]["acc"].item() * 100.0
+            auc = results_dict_knn[knn_]["auc"].item()
+            results_dict[f"{knn_} Accuracy"] = acc
+            results_dict[f"{knn_} AUC"] = auc
+            logger.info(f"{knn_}-NN classifier result: Accuracy: {acc:.2f} | AUC: {auc:.2f}")
 
-    metrics_file_path = os.path.join(output_dir, "results_eval_knn.json")
+    metrics_file_path = Path(output_dir, "results_eval_knn.json")
     with open(metrics_file_path, "a") as f:
         for k, v in results_dict.items():
             f.write(json.dumps({k: v}) + "\n")

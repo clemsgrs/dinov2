@@ -10,7 +10,7 @@ from typing import Any, Callable, List, Optional, TypeVar
 import torch
 from torch.utils.data import Sampler
 
-from .datasets import ImageNet, ImageNet22k, PathologyDataset
+from .datasets import ImageNet, ImageNet22k, PathologyDataset, KNNDataset
 from .samplers import EpochSampler, InfiniteSampler, ShardedInfiniteSampler
 
 
@@ -62,6 +62,10 @@ def _parse_dataset_str(dataset_str: str):
         class_ = PathologyDataset
         if "fold" in kwargs:
             kwargs["fold"] = PathologyDataset.Fold[kwargs["fold"]]
+    elif name == "KNN":
+        class_ = KNNDataset
+        if "split" in kwargs:
+            kwargs["split"] = KNNDataset.Split[kwargs["split"]]
     else:
         raise ValueError(f'Unsupported dataset "{name}"')
 

@@ -8,21 +8,30 @@ import logging
 import math
 import os
 import wandb
+import tqdm
 import datetime
 from functools import partial
 from typing import Optional
 from pathlib import Path
+from collections import defaultdict
 
 from fvcore.common.checkpoint import PeriodicCheckpointer
 import torch
 
 from dinov2.data import SamplerType, make_data_loader, make_dataset
 from dinov2.data import collate_data_and_cast, DataAugmentationDINO, MaskingGenerator
+from dinov2.data.transforms import make_classification_eval_transform
 import dinov2.distributed as distributed
 from dinov2.fsdp import FSDPCheckpointer
 from dinov2.logging import MetricLogger
 from dinov2.utils.config import setup
-from dinov2.utils.utils import CosineScheduler, initialize_wandb, is_main_process
+from dinov2.utils.utils import CosineScheduler, initialize_wandb, load_weights
+from dinov2.models import build_model_from_cfg
+from dinov2.eval.knn import eval_knn_with_model
+from dinov2.eval.setup import get_autocast_dtype
+from dinov2.eval.metrics import AccuracyAveraging
+from dinov2.eval.utils import EarlyStoppingDINO
+
 
 from dinov2.train.ssl_meta_arch import SSLMetaArch
 
@@ -145,13 +154,97 @@ def do_test(cfg, model, iteration):
         torch.save({"teacher": new_state_dict}, teacher_ckp_path)
 
 
+def do_tune(
+    cfg,
+    epoch,
+    model: torch.nn.Module,
+    train_dataset,
+    val_dataset,
+    output_dir,
+):
+    # in DINOv2, they have on SSLMetaArch class
+    # first creates student and teacher backbone based on config
+    # these are regular ViTs
+    # they're added to a dictionnary under the "backbone" key
+    # they add a DINOHead to the dictionnary under the "dino_head" key
+    # they add a second DINOHead under the "ibot_head" key
+    # then they define
+    # - self.student = nn.ModuleDict(student_model_dict)
+    # - self.teacher = nn.ModuleDict(teacher_model_dict)
+    # we can probably skip the DINOHeads and use forward(self, *args, is_training=False)
+    # then we get "x_norm_clstoken" = x_norm[:, 0]
+    # which should be of dimension embed_dim
+
+    student, teacher, _ = build_model_from_cfg(cfg)
+    student.cuda()
+    teacher.cuda()
+    tqdm.tqdm.write(f"Loading epoch {epoch} weights...")
+    student_weights = model.student.state_dict()
+    teacher_weights = model.teacher.state_dict()
+    load_weights(student, student_weights)
+    load_weights(teacher, teacher_weights)
+    student.eval()
+    teacher.eval()
+
+    autocast_dtype = get_autocast_dtype(cfg)
+
+    student_results = eval_knn_with_model(
+        model=student,
+        output_dir=output_dir,
+        train_dataset=train_dataset,
+        val_dataset=val_dataset,
+        nb_knn=cfg.tune.knn.nb_knn,
+        temperature=cfg.tune.knn.temperature,
+        autocast_dtype=autocast_dtype,
+        accuracy_averaging=AccuracyAveraging.MEAN_ACCURACY,
+        gather_on_cpu=cfg.tune.knn.gather_on_cpu,
+        batch_size=cfg.tune.knn.batch_size,
+        num_workers=4,
+        n_per_class_list=cfg.tune.knn.n_per_class_list,
+        n_tries=cfg.tune.knn.n_tries,
+    )
+
+    teacher_results = eval_knn_with_model(
+        model=teacher,
+        output_dir=output_dir,
+        train_dataset=train_dataset,
+        val_dataset=val_dataset,
+        nb_knn=cfg.tune.knn.nb_knn,
+        temperature=cfg.tune.knn.temperature,
+        autocast_dtype=autocast_dtype,
+        accuracy_averaging=AccuracyAveraging.MEAN_ACCURACY,
+        gather_on_cpu=cfg.tune.knn.gather_on_cpu,
+        batch_size=cfg.tune.knn.batch_size,
+        num_workers=4,
+        n_per_class_list=cfg.tune.knn.n_per_class_list,
+        n_tries=cfg.tune.knn.n_tries,
+    )
+
+    #######
+
+    results = defaultdict(dict)
+    for k in cfg.tune.knn.nb_knn:
+        student_acc = student_results[f"{k} Accuracy"]
+        student_auc = student_results[f"{k} AUC"]
+        teacher_acc = teacher_results[f"{k} Accuracy"]
+        teacher_auc = teacher_results[f"{k} AUC"]
+        results["student"].update({f"acc_{k}": student_acc, f"auc_{k}": student_auc})
+        results["teacher"].update({f"acc_{k}": teacher_acc, f"auc_{k}": teacher_auc})
+
+    return results
+
+
 def do_train(cfg, model, gpu_id, resume=False):
+
     model.train()
     inputs_dtype = torch.half
     fp16_scaler = model.fp16_scaler  # for mixed precision training
 
-    # setup optimizer
+    results_save_dir = Path(cfg.train.output_dir, "results")
+    if distributed.is_main_process():
+        results_save_dir.mkdir(exist_ok=True)
 
+    # setup optimizer
     optimizer = build_optimizer(cfg, model.get_params_groups())
     (
         lr_schedule,
@@ -162,7 +255,10 @@ def do_train(cfg, model, gpu_id, resume=False):
     ) = build_schedulers(cfg)
 
     # checkpointer
-    checkpointer = FSDPCheckpointer(model, cfg.train.output_dir, optimizer=optimizer, save_to_disk=True)
+    checkpoint_save_dir = Path(cfg.train.output_dir, "checkpoints")
+    if distributed.is_main_process():
+        checkpoint_save_dir.mkdir(exist_ok=True)
+    checkpointer = FSDPCheckpointer(model, str(checkpoint_save_dir), optimizer=optimizer, save_to_disk=True)
 
     start_iter = checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get("iteration", -1) + 1
 
@@ -171,7 +267,7 @@ def do_train(cfg, model, gpu_id, resume=False):
 
     periodic_checkpointer = PeriodicCheckpointer(
         checkpointer,
-        period=3 * OFFICIAL_EPOCH_LENGTH,
+        period=cfg.train.save_every * OFFICIAL_EPOCH_LENGTH,
         max_iter=max_iter,
         max_to_keep=3,
     )
@@ -224,6 +320,42 @@ def do_train(cfg, model, gpu_id, resume=False):
         collate_fn=collate_fn,
     )
 
+    # setup tuning data
+
+    if cfg.tune.tune_every:
+
+        tokens = cfg.train.dataset_path.split(":")
+        kwargs = {}
+        for token in tokens[1:]:
+            key, value = token.split("=")
+            assert key in ("root", "split")
+            kwargs[key] = value
+
+        transform = make_classification_eval_transform()
+        train_dataset_str = f"KNN:root={kwargs['root']}:split=TRAIN"
+        val_dataset_str = f"KNN:root={kwargs['root']}:split=TEST"
+
+        train_dataset = make_dataset(
+            dataset_str=train_dataset_str,
+            transform=transform,
+        )
+        val_dataset = make_dataset(
+            dataset_str=val_dataset_str,
+            transform=transform,
+        )
+
+    # setup early stopper
+
+    stop = False
+    early_stopper = EarlyStoppingDINO(
+        cfg.tune.early_stopping.tracking,
+        cfg.tune.early_stopping.min_max,
+        cfg.tune.early_stopping.patience,
+        cfg.tune.early_stopping.min_epoch,
+        checkpoint_dir=checkpoint_save_dir,
+        verbose=True,
+    )
+
     # training loop
 
     iteration = start_iter
@@ -231,7 +363,7 @@ def do_train(cfg, model, gpu_id, resume=False):
     logger.info("Starting training from iteration {}".format(start_iter))
     metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
     metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file)
-    header = "Training"
+    header = "Train"
 
     for data in metric_logger.log_every(
         data_loader,
@@ -297,23 +429,61 @@ def do_train(cfg, model, gpu_id, resume=False):
         metric_logger.update(current_batch_size=current_batch_size)
         metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
 
+        epoch = iteration // OFFICIAL_EPOCH_LENGTH
+
         # log at the end of each epoch
-        if (iteration + 1) % OFFICIAL_EPOCH_LENGTH == 0:
+        if iteration % OFFICIAL_EPOCH_LENGTH == 0:
 
             # log the total loss and each individual loss to wandb
-            log_dict = {"epoch": (iteration + 1) // OFFICIAL_EPOCH_LENGTH}
+            log_dict = {"epoch": epoch}
             update_log_dict(log_dict, f'{header.lower()}/lr', lr, step="epoch")
             update_log_dict(log_dict, f'{header.lower()}/wd', wd, step="epoch")
             update_log_dict(log_dict, f'{header.lower()}/loss', losses_reduced, step="epoch")
             for loss_name, loss_value in loss_dict.items():
                 update_log_dict(log_dict, f'{header.lower()}/{loss_name}', loss_value, step="epoch")
-            wandb.log(log_dict)
+
+            # optionally run tuning
+            # only run tuning on rank 0, otherwise one has to take care of gathering knn metrics from multiple gpus
+            tune_results = None
+            if (
+                cfg.tune.tune_every
+                and epoch % cfg.tune.tune_every == 0
+            ):
+                tune_results = do_tune(
+                    cfg,
+                    epoch+1,
+                    model,
+                    train_dataset,
+                    val_dataset,
+                    results_save_dir,
+                )
+
+                if distributed.is_main_process():
+                    for model_name, metrics_dict in tune_results.items():
+                        for name, value in metrics_dict.items():
+                            update_log_dict(log_dict, f'tune/{model_name}.{name}', value, step="epoch")
+
+        if distributed.is_main_process():
+            early_stopper(epoch, tune_results, checkpointer, iteration, k=cfg.tune.knn.nb_knn[0])
+            if early_stopper.early_stop and cfg.tune.early_stopping.enable:
+                stop = True
+
+        if stop:
+            tqdm.tqdm.write(
+                f"Stopping early because best {cfg.tune.early_stopping.tracking} was reached {cfg.tune.early_stopping.patience} epochs ago"
+            )
+            break
+
+        # save snapshot and log to wandb
+        if distributed.is_main_process() and cfg.wandb.enable and iteration % OFFICIAL_EPOCH_LENGTH == 0:
+            wandb.log(log_dict, step=epoch)
 
         # checkpointing and testing
 
         if cfg.evaluation.eval_period_iterations > 0 and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0:
             do_test(cfg, model, f"training_{iteration}")
             torch.cuda.synchronize()
+
         periodic_checkpointer.step(iteration)
 
         iteration = iteration + 1
@@ -336,7 +506,7 @@ def main(args):
     else:
         gpu_id = -1
 
-    if is_main_process():
+    if distributed.is_main_process():
         print(f"torch.cuda.device_count(): {torch.cuda.device_count()}")
         run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M")
         # set up wandb

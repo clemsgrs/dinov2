@@ -5,6 +5,9 @@
 
 import logging
 from typing import Dict, Optional
+from pathlib import Path
+import tqdm
+import pandas as pd
 
 import torch
 from torch import nn
@@ -144,3 +147,68 @@ def extract_features_with_dataloader(model, data_loader, sample_count, gather_on
     assert torch.all(all_labels > -1)
 
     return features, all_labels
+
+
+class EarlyStoppingDINO:
+    """
+    Leverage a downstream classification task to know if teacher still outperforms student
+    """
+
+    def __init__(
+        self,
+        tracking: str,
+        min_max: str,
+        patience: int = 20,
+        min_epoch: int = 50,
+        checkpoint_dir: Optional[Path] = None,
+        verbose: bool = False,
+    ):
+        """
+        Args:
+            patience (int): How long to wait after last time validation loss improved.
+            min_epoch (int): Earliest epoch possible for stopping
+            verbose (bool): If True, prints a message for each validation loss improvement
+        """
+        self.tracking = tracking
+        self.min_max = min_max
+        self.patience = patience
+        self.min_epoch = min_epoch
+        self.checkpoint_dir = checkpoint_dir
+        self.verbose = verbose
+
+        self.best_score = None
+        self.early_stop = False
+
+    def __call__(self, epoch, results, checkpointer, iteration, k):
+        if results is not None:
+            teacher_score = results["teacher"][f"{self.tracking}_{k}"]
+            student_score = results["student"][f"{self.tracking}_{k}"]
+
+            if self.min_max == "min":
+                teacher_score = -1 * teacher_score
+                student_score = -1 * student_score
+
+            if self.best_score is None or (
+                teacher_score >= self.best_score and teacher_score > student_score
+            ):
+                self.best_score = teacher_score
+                fname = f"best.pt"
+                checkpointer.save(fname, iteration=iteration)
+                self.counter = 0
+
+            elif teacher_score < self.best_score or teacher_score <= student_score:
+                self.counter += 1
+                if epoch <= self.min_epoch + 1 and self.verbose:
+                    tqdm.tqdm.write(
+                        f"EarlyStopping counter: {min(self.counter,self.patience)}/{self.patience}"
+                    )
+                elif self.verbose:
+                    tqdm.tqdm.write(
+                        f"EarlyStopping counter: {self.counter}/{self.patience}"
+                    )
+                if self.counter >= self.patience and epoch > self.min_epoch:
+                    self.early_stop = True
+
+        # override latest
+        fname = f"latest.pt"
+        checkpointer.save(fname, iteration=iteration)

@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 import torch
 from torch import Tensor
 from torchmetrics import Metric, MetricCollection
-from torchmetrics.classification import MulticlassAccuracy
+from torchmetrics.classification import MulticlassAccuracy, AUROC
 from torchmetrics.utilities.data import dim_zero_cat, select_topk
 
 
@@ -40,25 +40,30 @@ class AccuracyAveraging(Enum):
         return self.value
 
 
-def build_metric(metric_type: MetricType, *, num_classes: int, ks: Optional[tuple] = None):
-    if metric_type.accuracy_averaging is not None:
-        return build_topk_accuracy_metric(
-            average_type=metric_type.accuracy_averaging,
-            num_classes=num_classes,
-            ks=(1, 5) if ks is None else ks,
-        )
-    elif metric_type == MetricType.IMAGENET_REAL_ACCURACY:
-        return build_topk_imagenet_real_accuracy_metric(
-            num_classes=num_classes,
-            ks=(1, 5) if ks is None else ks,
-        )
-
-    raise ValueError(f"Unknown metric type {metric_type}")
+def build_metric(num_classes: int, average_type: AccuracyAveraging):
+    task = "binary"
+    if num_classes > 2:
+        task = "multiclass"
+    metrics: Dict[str, Metric] = {
+        "acc": MulticlassAccuracy(top_k=1, num_classes=int(num_classes), average=average_type.value),
+        "auc": AUROC(task),
+    }
+    return MetricCollection(metrics)
 
 
 def build_topk_accuracy_metric(average_type: AccuracyAveraging, num_classes: int, ks: tuple = (1, 5)):
     metrics: Dict[str, Metric] = {
         f"top-{k}": MulticlassAccuracy(top_k=k, num_classes=int(num_classes), average=average_type.value) for k in ks
+    }
+    return MetricCollection(metrics)
+
+
+def build_auc_metric(num_classes: int):
+    task = "binary"
+    if num_classes > 2:
+        task = "multiclass"
+    metrics: Dict[str, Metric] = {
+        f"auc": AUROC(task)
     }
     return MetricCollection(metrics)
 
