@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 import torch
 from torch import Tensor
 from torchmetrics import Metric, MetricCollection
-from torchmetrics.classification import MulticlassAccuracy, AUROC
+from torchmetrics.classification import MulticlassAccuracy, Accuracy, AUROC
 from torchmetrics.utilities.data import dim_zero_cat, select_topk
 
 
@@ -45,8 +45,8 @@ def build_metric(num_classes: int, average_type: AccuracyAveraging):
     if num_classes > 2:
         task = "multiclass"
     metrics: Dict[str, Metric] = {
-        "acc": MulticlassAccuracy(top_k=1, num_classes=int(num_classes), average=average_type.value),
-        "auc": AUROC(task),
+        "acc": Accuracy(task=task, num_classes=int(num_classes), average=average_type.value),
+        "auc": AUROC(task=task),
     }
     return MetricCollection(metrics)
 
@@ -62,7 +62,7 @@ def build_auc_metric(num_classes: int):
     task = "binary"
     if num_classes > 2:
         task = "multiclass"
-    metrics: Dict[str, Metric] = {"auc": AUROC(task)}
+    metrics: Dict[str, Metric] = {"auc": AUROC(task=task)}
     return MetricCollection(metrics)
 
 

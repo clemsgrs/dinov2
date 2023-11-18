@@ -169,7 +169,7 @@ class KNNDataset(ExtendedVisionDataset):
 
     def _load_class_ids(self, _class_ids_name: str) -> np.ndarray:
         class_ids_path = Path(self.root, _class_ids_name)
-        return np.load(class_ids_path, allow_pickle=True).item()
+        return np.load(class_ids_path, allow_pickle=True)
 
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]

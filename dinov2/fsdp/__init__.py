@@ -9,7 +9,7 @@ from typing import Any
 import torch
 import dinov2.distributed as distributed
 from functools import partial
-from fvcore.common.checkpoint import Checkpointer
+from fvcore.common.checkpoint import Checkpointer, PeriodicCheckpointer
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
 from torch.distributed.fsdp import MixedPrecision
@@ -83,7 +83,7 @@ def rankstr():
 
 
 class FSDPCheckpointer(Checkpointer):
-    def save(self, name: str, **kwargs: Any) -> None:
+    def save(self, name: str, run_distributed: bool = True, **kwargs: Any) -> None:
         """
         Dump model and checkpointables to a file.
 
@@ -95,7 +95,10 @@ class FSDPCheckpointer(Checkpointer):
             return
 
         data = {}
-        with FSDP.state_dict_type(self.model, StateDictType.LOCAL_STATE_DICT):
+        sd = StateDictType.FULL_STATE_DICT
+        if run_distributed:
+            sd = StateDictType.LOCAL_STATE_DICT
+        with FSDP.state_dict_type(self.model, sd):
             data["model"] = self.model.state_dict()
 
         # data["model"] = self.model.state_dict()
@@ -106,7 +109,6 @@ class FSDPCheckpointer(Checkpointer):
         basename = f"{name}.{rankstr()}.pth"
         save_file = os.path.join(self.save_dir, basename)
         assert os.path.basename(save_file) == basename, basename
-        self.logger.info("Saving checkpoint to {}".format(save_file))
         with self.path_manager.open(save_file, "wb") as f:
             torch.save(data, f)
         self.tag_last_checkpoint(basename)

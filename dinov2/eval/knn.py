@@ -246,6 +246,7 @@ def eval_knn(
     train_dataset,
     val_dataset,
     accuracy_averaging,
+    gpu_id,
     nb_knn,
     temperature,
     batch_size,
@@ -258,7 +259,7 @@ def eval_knn(
 
     logger.info("Extracting features for train set...")
     train_features, train_labels = extract_features(
-        model, train_dataset, batch_size, num_workers, gather_on_cpu=gather_on_cpu
+        model, train_dataset, batch_size, num_workers, gpu_id, gather_on_cpu=gather_on_cpu
     )
     logger.info(f"Train features created, shape {train_features.shape}.")
 
@@ -296,7 +297,7 @@ def eval_knn(
 
     # ============ evaluation ... ============
     logger.info("Start the k-NN classification.")
-    _, results_dict = evaluate(model_with_knn, val_dataloader, postprocessors, metrics, device)
+    _, results_dict = evaluate(model_with_knn, val_dataloader, num_classes, postprocessors, metrics, device)
 
     # Averaging the results over the n tries for each value of n_per_class
     for n_per_class, knn_module in knn_module_dict.items():
@@ -323,6 +324,7 @@ def eval_knn_with_model(
     temperature=0.07,
     autocast_dtype=torch.float,
     accuracy_averaging=AccuracyAveraging.MEAN_ACCURACY,
+    gpu_id=-1,
     gather_on_cpu=False,
     batch_size=256,
     num_workers=5,
@@ -335,6 +337,7 @@ def eval_knn_with_model(
             train_dataset=train_dataset,
             val_dataset=val_dataset,
             accuracy_averaging=accuracy_averaging,
+            gpu_id=gpu_id,
             nb_knn=nb_knn,
             temperature=temperature,
             batch_size=batch_size,
@@ -347,11 +350,12 @@ def eval_knn_with_model(
     results_dict = {}
     if distributed.is_main_process():
         for knn_ in results_dict_knn.keys():
+            k = knn_[1]
             acc = results_dict_knn[knn_]["acc"].item() * 100.0
             auc = results_dict_knn[knn_]["auc"].item()
-            results_dict[f"{knn_} Accuracy"] = acc
-            results_dict[f"{knn_} AUC"] = auc
-            logger.info(f"{knn_}-NN classifier result: Accuracy: {acc:.2f} | AUC: {auc:.2f}")
+            results_dict[f"{k} Accuracy"] = acc
+            results_dict[f"{k} AUC"] = auc
+            logger.info(f"{k}-NN classifier result: Accuracy: {acc:.2f} | AUC: {auc:.2f}")
 
     metrics_file_path = Path(output_dir, "results_eval_knn.json")
     with open(metrics_file_path, "a") as f:
@@ -374,6 +378,7 @@ def main(args):
         temperature=args.temperature,
         autocast_dtype=autocast_dtype,
         accuracy_averaging=AccuracyAveraging.MEAN_ACCURACY,
+        gpu_id=-1,
         transform=None,
         gather_on_cpu=args.gather_on_cpu,
         batch_size=args.batch_size,

@@ -70,9 +70,7 @@ train:
   centering: "centering" # or "sinkhorn_knopp"
   save_every: 3
 tune:
-  tune_every: 1
-  train_csv: ''
-  test_csv: ''
+  tune_every:
   early_stopping:
     enable: false
     tracking: "auc_20"
@@ -85,7 +83,7 @@ tune:
     batch_size: 256
     n_per_class_list: [-1]
     n_tries: 1
-    gather-on-cpu: false
+    gather_on_cpu: false
 student:
   arch: vit_large
   patch_size: 16

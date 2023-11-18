@@ -11,6 +11,7 @@ import tqdm
 import torch
 from torch import nn
 from torchmetrics import MetricCollection
+from torch.nn.functional import one_hot
 
 from dinov2.data import DatasetWithEnumeratedTargets, SamplerType, make_data_loader
 import dinov2.distributed as distributed
@@ -50,6 +51,7 @@ class ModelWithIntermediateLayers(nn.Module):
 def evaluate(
     model: nn.Module,
     data_loader,
+    num_classes,
     postprocessors: Dict[str, nn.Module],
     metrics: Dict[str, MetricCollection],
     device: torch.device,
@@ -63,18 +65,19 @@ def evaluate(
         metric = metric.to(device)
 
     metric_logger = MetricLogger(delimiter="  ")
-    header = "Test:"
+    header = "Test"
 
-    for samples, targets, *_ in metric_logger.log_every(data_loader, 10, header):
+    for samples, targets, *_ in metric_logger.log_every(data_loader, 10, device, header):
         outputs = model(samples.to(device))
         targets = targets.to(device)
+        one_hot_targets = one_hot(targets, num_classes=num_classes)
 
         if criterion is not None:
             loss = criterion(outputs, targets)
             metric_logger.update(loss=loss.item())
 
         for k, metric in metrics.items():
-            metric_inputs = postprocessors[k](outputs, targets)
+            metric_inputs = postprocessors[k](outputs, one_hot_targets)
             metric.update(**metric_inputs)
 
     metric_logger.synchronize_between_processes()
@@ -97,7 +100,7 @@ def all_gather_and_flatten(tensor_rank):
     return tensor_all_ranks.flatten(end_dim=1)
 
 
-def extract_features(model, dataset, batch_size, num_workers, gather_on_cpu=False):
+def extract_features(model, dataset, batch_size, num_workers, gpu_id, gather_on_cpu=False):
     dataset_with_enumerated_targets = DatasetWithEnumeratedTargets(dataset)
     sample_count = len(dataset_with_enumerated_targets)
     data_loader = make_data_loader(
@@ -108,15 +111,15 @@ def extract_features(model, dataset, batch_size, num_workers, gather_on_cpu=Fals
         drop_last=False,
         shuffle=False,
     )
-    return extract_features_with_dataloader(model, data_loader, sample_count, gather_on_cpu)
+    return extract_features_with_dataloader(model, data_loader, sample_count, gpu_id, gather_on_cpu)
 
 
 @torch.inference_mode()
-def extract_features_with_dataloader(model, data_loader, sample_count, gather_on_cpu=False):
+def extract_features_with_dataloader(model, data_loader, sample_count, gpu_id, gather_on_cpu=False):
     gather_device = torch.device("cpu") if gather_on_cpu else torch.device("cuda")
     metric_logger = MetricLogger(delimiter="  ")
     features, all_labels = None, None
-    for samples, (index, labels_rank) in metric_logger.log_every(data_loader, 10):
+    for samples, (index, labels_rank) in metric_logger.log_every(data_loader, 10, gpu_id):
         samples = samples.cuda(non_blocking=True)
         labels_rank = labels_rank.cuda(non_blocking=True)
         index = index.cuda(non_blocking=True)
@@ -178,10 +181,10 @@ class EarlyStoppingDINO:
         self.best_score = None
         self.early_stop = False
 
-    def __call__(self, epoch, results, checkpointer, iteration, k):
+    def __call__(self, epoch, results, checkpointer, run_distributed, iteration):
         if results is not None:
-            teacher_score = results["teacher"][f"{self.tracking}_{k}"]
-            student_score = results["student"][f"{self.tracking}_{k}"]
+            teacher_score = results["teacher"][f"{self.tracking}"]
+            student_score = results["student"][f"{self.tracking}"]
 
             if self.min_max == "min":
                 teacher_score = -1 * teacher_score
@@ -189,8 +192,8 @@ class EarlyStoppingDINO:
 
             if self.best_score is None or (teacher_score >= self.best_score and teacher_score > student_score):
                 self.best_score = teacher_score
-                fname = "best.pt"
-                checkpointer.save(fname, iteration=iteration)
+                fname = "best"
+                checkpointer.save(fname, run_distributed=run_distributed, iteration=iteration)
                 self.counter = 0
 
             elif teacher_score < self.best_score or teacher_score <= student_score:
@@ -203,5 +206,5 @@ class EarlyStoppingDINO:
                     self.early_stop = True
 
         # override latest
-        fname = "latest.pt"
-        checkpointer.save(fname, iteration=iteration)
+        fname = "latest"
+        checkpointer.save(fname, run_distributed=run_distributed, iteration=iteration)

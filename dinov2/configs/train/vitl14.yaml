@@ -9,6 +9,10 @@ train:
   dataset_path: Pathology:root=/root/data
   centering: sinkhorn_knopp
   num_workers: 4
+tune:
+  tune_every: 1
+  early_stopping:
+    enable: false
 student:
   arch: vit_large
   patch_size: 14
@@ -26,7 +30,7 @@ optim:
 crops:
   local_crops_size: 98
 wandb:
-  enable: True
+  enable: true
   project: 'vision'
   username: 'vlfm'
   exp_name: 'dinov2'

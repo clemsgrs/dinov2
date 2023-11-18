@@ -24,7 +24,7 @@ from dinov2.data.transforms import make_classification_eval_transform
 import dinov2.distributed as distributed
 from dinov2.fsdp import FSDPCheckpointer
 from dinov2.logging import MetricLogger
-from dinov2.utils.config import setup
+from dinov2.utils.config import setup, write_config
 from dinov2.utils.utils import CosineScheduler, initialize_wandb, load_weights
 from dinov2.models import build_model_from_cfg
 from dinov2.eval.knn import eval_knn_with_model
@@ -161,6 +161,7 @@ def do_tune(
     train_dataset,
     val_dataset,
     output_dir,
+    gpu_id,
 ):
     # in DINOv2, they have on SSLMetaArch class
     # first creates student and teacher backbone based on config
@@ -197,6 +198,7 @@ def do_tune(
         temperature=cfg.tune.knn.temperature,
         autocast_dtype=autocast_dtype,
         accuracy_averaging=AccuracyAveraging.MEAN_ACCURACY,
+        gpu_id=gpu_id,
         gather_on_cpu=cfg.tune.knn.gather_on_cpu,
         batch_size=cfg.tune.knn.batch_size,
         num_workers=4,
@@ -213,6 +215,7 @@ def do_tune(
         temperature=cfg.tune.knn.temperature,
         autocast_dtype=autocast_dtype,
         accuracy_averaging=AccuracyAveraging.MEAN_ACCURACY,
+        gpu_id=gpu_id,
         gather_on_cpu=cfg.tune.knn.gather_on_cpu,
         batch_size=cfg.tune.knn.batch_size,
         num_workers=4,
@@ -234,7 +237,7 @@ def do_tune(
     return results
 
 
-def do_train(cfg, model, gpu_id, resume=False):
+def do_train(cfg, model, gpu_id, run_distributed, resume=False):
     model.train()
     inputs_dtype = torch.half
     fp16_scaler = model.fp16_scaler  # for mixed precision training
@@ -431,13 +434,14 @@ def do_train(cfg, model, gpu_id, resume=False):
 
         # log at the end of each epoch
         if iteration % OFFICIAL_EPOCH_LENGTH == 0:
-            # log the total loss and each individual loss to wandb
-            log_dict = {"epoch": epoch}
-            update_log_dict(log_dict, f"{header.lower()}/lr", lr, step="epoch")
-            update_log_dict(log_dict, f"{header.lower()}/wd", wd, step="epoch")
-            update_log_dict(log_dict, f"{header.lower()}/loss", losses_reduced, step="epoch")
-            for loss_name, loss_value in loss_dict.items():
-                update_log_dict(log_dict, f"{header.lower()}/{loss_name}", loss_value, step="epoch")
+            if cfg.wandb.enable:
+                # log the total loss and each individual loss to wandb
+                log_dict = {"epoch": epoch}
+                update_log_dict(log_dict, f"{header.lower()}/lr", lr, step="epoch")
+                update_log_dict(log_dict, f"{header.lower()}/wd", wd, step="epoch")
+                update_log_dict(log_dict, f"{header.lower()}/loss", losses_reduced, step="epoch")
+                for loss_name, loss_value in loss_dict.items():
+                    update_log_dict(log_dict, f"{header.lower()}/{loss_name}", loss_value, step="epoch")
 
             # optionally run tuning
             # only run tuning on rank 0, otherwise one has to take care of gathering knn metrics from multiple gpus
@@ -450,17 +454,18 @@ def do_train(cfg, model, gpu_id, resume=False):
                     train_dataset,
                     val_dataset,
                     results_save_dir,
+                    gpu_id,
                 )
 
-                if distributed.is_main_process():
+                if distributed.is_main_process() and cfg.wandb.enable:
                     for model_name, metrics_dict in tune_results.items():
                         for name, value in metrics_dict.items():
                             update_log_dict(log_dict, f"tune/{model_name}.{name}", value, step="epoch")
 
-        if distributed.is_main_process():
-            early_stopper(epoch, tune_results, checkpointer, iteration, k=cfg.tune.knn.nb_knn[0])
-            if early_stopper.early_stop and cfg.tune.early_stopping.enable:
-                stop = True
+            if distributed.is_main_process():
+                early_stopper(epoch, tune_results, checkpointer, run_distributed, iteration)
+                if early_stopper.early_stop and cfg.tune.early_stopping.enable:
+                    stop = True
 
         if stop:
             tqdm.tqdm.write(
@@ -478,7 +483,7 @@ def do_train(cfg, model, gpu_id, resume=False):
             do_test(cfg, model, f"training_{iteration}")
             torch.cuda.synchronize()
 
-        periodic_checkpointer.step(iteration)
+        periodic_checkpointer.step(iteration, run_distributed=run_distributed)
 
         iteration = iteration + 1
 
@@ -491,9 +496,8 @@ def do_train(cfg, model, gpu_id, resume=False):
 def main(args):
     cfg = setup(args)
 
-    distributed = torch.cuda.device_count() > 1
-    if distributed:
-        torch.distributed.init_process_group(backend="nccl")
+    run_distributed = torch.cuda.device_count() > 1
+    if run_distributed:
         gpu_id = int(os.environ["LOCAL_RANK"])
         if gpu_id == 0:
             print("Distributed session successfully initialized")
@@ -512,14 +516,17 @@ def main(args):
     else:
         run_id = ""
 
-    if distributed:
+    if run_distributed:
         obj = [run_id]
         torch.distributed.broadcast_object_list(obj, 0, device=torch.device(f"cuda:{gpu_id}"))
         run_id = obj[0]
 
     output_dir = Path(cfg.train.output_dir, run_id)
-    output_dir.mkdir(exist_ok=True, parents=True)
+    if distributed.is_main_process():
+        output_dir.mkdir(exist_ok=True, parents=True)
     cfg.train.output_dir = str(output_dir)
+
+    write_config(cfg, cfg.train.output_dir)
 
     model = SSLMetaArch(cfg).to(torch.device("cuda"))
     model.prepare_for_distributed_training()
@@ -534,9 +541,13 @@ def main(args):
         )
         return do_test(cfg, model, f"manual_{iteration}")
 
-    do_train(cfg, model, gpu_id, resume=not args.no_resume)
+    do_train(cfg, model, gpu_id, run_distributed, resume=not args.no_resume)
 
 
 if __name__ == "__main__":
+    import warnings
+
+    warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is deprecated")
+
     args = get_args_parser(add_help=True).parse_args()
     main(args)
