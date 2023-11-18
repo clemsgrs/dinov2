@@ -16,12 +16,12 @@ def parse_tar_header(header_bytes):
 
 
 def infer_entries_from_tarball(
-    df,
     tarball_path,
     output_root,
     restrict_filepaths: Optional[List[str]] = None,
     prefix: Optional[str] = None,
     suffix: Optional[str] = None,
+    df: Optional[pd.DataFrame] = None,
     label_name: str = '"label',
     class_name: str = '"class',
 ):
@@ -32,9 +32,10 @@ def infer_entries_from_tarball(
     total_size = os.path.getsize(tarball_path)
     progress_bar = tqdm.tqdm(total=total_size, desc="Reading Tarball")
 
-    if class_name not in df.columns:
-        df[class_name] = df[label_name].apply(lambda x: f"class_{x}")
-    df["stem"] = df.filepath.apply(lambda fp: Path(fp).stem)
+    if df is not None:
+        if class_name not in df.columns:
+            df[class_name] = df[label_name].apply(lambda x: f"class_{x}")
+        df["stem"] = df.filepath.apply(lambda fp: Path(fp).stem)
 
     # convert restrict filepaths to a set for efficient lookup, if provided
     restrict_filepaths = set(restrict_filepaths) if restrict_filepaths else None
@@ -55,7 +56,10 @@ def infer_entries_from_tarball(
             file_indices[file_index] = name
 
             # get class index
-            class_index = df[df["stem"] == Path(name).stem][label_name].values[0]
+            if df is not None:
+                class_index = df[df["stem"] == Path(name).stem][label_name].values[0]
+            else:
+                class_index = 0
 
             if restrict_filepaths is None or name in restrict_filepaths:
                 start_offset = f.tell()
@@ -88,18 +92,18 @@ def infer_entries_from_tarball(
     if not file_indices_filepath.exists():
         np.save(file_indices_filepath, file_indices)
 
-    # optionally save class index mapping
-    df = df.drop_duplicates(subset=[label_name, class_name])
-    class_ids = df[[label_name, class_name]].values
-    class_ids_filepath = Path(output_root, "class-ids.npy")
-    if not file_indices_filepath.exists():
-        np.save(class_ids_filepath, class_ids)
+    if df is not None:
+        # optionally save class index mapping
+        df = df.drop_duplicates(subset=[label_name, class_name])
+        class_ids = df[[label_name, class_name]].values
+        class_ids_filepath = Path(output_root, "class-ids.npy")
+        if not file_indices_filepath.exists():
+            np.save(class_ids_filepath, class_ids)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Generate entries file for pretraining dataset.")
     parser.add_argument("-t", "--tarball_path", type=str, required=True, help="Path to the tarball file.")
-    parser.add_argument("-c", "--csv", type=str, required=True, help="Path to the csv file with samples labels.")
     parser.add_argument(
         "-o",
         "--output_root",
@@ -112,6 +116,7 @@ def main():
         "-r", "--restrict", type=str, help="Path to a .txt file with the filenames for a specific fold."
     )
     parser.add_argument("-s", "--suffix", type=str, help="Suffix to append to the entries.npy file name.")
+    parser.add_argument("-c", "--csv", type=str, help="Path to the csv file with samples labels.")
     parser.add_argument("-l", "--label_name", type=str, default="label", help="Name of the column holding the labels.")
     parser.add_argument(
         "-n", "--class_name", type=str, default="class", help="Name of the column holding the class names."
@@ -127,9 +132,9 @@ def main():
     prefix = f"{args.prefix}" if args.prefix else None
     suffix = f"{args.suffix}" if args.restrict and args.suffix else None
 
-    df = pd.read_csv(args.csv)
+    df = pd.read_csv(args.csv) if args.csv else None
     infer_entries_from_tarball(
-        df, args.tarball_path, args.output_root, restrict_filepaths, prefix, suffix, args.label_name, args.class_name
+        args.tarball_path, args.output_root, restrict_filepaths, prefix, suffix, df, args.label_name, args.class_name
     )
 
 

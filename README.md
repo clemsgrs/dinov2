@@ -102,13 +102,13 @@ export PYTHONPATH="${PYTHONPATH}:/path/to/your/dinov2"
 
 ## Training
 
-### Training a ViT-S/16
+### Training a ViT-L/14
 
-Update `dinov2/configs/train/vits16.yaml` and run:
+Update `dinov2/configs/train/vitl14.yaml` and run:
 
 ```shell
 python dinov2/train/train.py \
-    --config-file dinov2/configs/train/vits16.yaml \
+    --config-file dinov2/configs/train/vitl14.yaml \
     --output-dir <PATH/TO/OUTPUT/DIR> \
     train.dataset_path=Pathology:root=<PATH/TO/DATASET>:fold=<FOLD_INDEX>
 ```
