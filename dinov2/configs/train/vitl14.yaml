@@ -36,7 +36,7 @@ wandb:
   project: 'vision'
   username: 'vlfm'
   exp_name: 'dinov2'
-  tags: ['dinov2', 'vit_large']
+  tags: ['dinov2', '${student.arch}']
   dir: '/home/user'
   group:
   resume_id:

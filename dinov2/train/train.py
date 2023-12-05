@@ -517,7 +517,8 @@ def main(args):
         output_dir.mkdir(exist_ok=True, parents=True)
     cfg.train.output_dir = str(output_dir)
 
-    write_config(cfg, cfg.train.output_dir)
+    if distributed.is_main_process():
+        write_config(cfg, cfg.train.output_dir)
 
     model = SSLMetaArch(cfg).to(torch.device("cuda"))
     model.prepare_for_distributed_training()

@@ -43,6 +43,7 @@ def get_cfg_from_args(args):
     default_cfg = OmegaConf.create(dinov2_default_config)
     cfg = OmegaConf.load(args.config_file)
     cfg = OmegaConf.merge(default_cfg, cfg, OmegaConf.from_cli(args.opts))
+    OmegaConf.resolve(cfg)
     return cfg
 
 
