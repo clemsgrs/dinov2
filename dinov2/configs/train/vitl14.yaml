@@ -8,7 +8,7 @@ train:
   batch_size_per_gpu: 32
   dataset_path: Pathology:root=/root/data:fold=0
   centering: sinkhorn_knopp
-  num_workers: 4
+  num_workers: 8
 tune:
   tune_every: 1
   query_dataset_path: KNN:root=/root/data:split=QUERY:fold=0
@@ -36,7 +36,7 @@ wandb:
   project: 'vision'
   username: 'vlfm'
   exp_name: 'dinov2'
-  tags: ['dinov2', '${student.arch}']
+  tags: ['dinov2', 'patch', '${student.arch}']
   dir: '/home/user'
   group:
   resume_id:

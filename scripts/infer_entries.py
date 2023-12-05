@@ -27,6 +27,7 @@ def parse_tar_header(header_bytes):
 def infer_entries_from_tarball(
     tarball_path,
     output_root,
+    cohort_name: str = "unspecified",
     restrict_filenames: Optional[List[str]] = None,
     prefix: Optional[str] = None,
     suffix: Optional[str] = None,
@@ -81,7 +82,7 @@ def infer_entries_from_tarball(
                     class_index = df[df[file_name] == filename][label_name].values[0]
                 start_offset = f.tell()
                 end_offset = start_offset + size
-                entries.append([class_index, file_index, start_offset, end_offset])
+                entries.append([class_index, file_index, start_offset, end_offset, cohort_name])
 
             file_index += 1
 
@@ -121,49 +122,48 @@ def infer_entries_from_tarball(
 def main():
     parser = argparse.ArgumentParser(description="Generate entries file for pretraining dataset.")
     parser.add_argument(
-        "-t",
         "--tarball_path",
         type=str,
         required=True,
         help="Path to the tarball file.",
     )
     parser.add_argument(
-        "-o",
+        "--cohort_name",
+        type=str,
+        default="unspecified",
+        help="Name given to the tarball data.",
+    )
+    parser.add_argument(
         "--output_root",
         type=str,
         required=True,
         help="Path to the output directory where dataset.tar and entries.npy will be saved.",
     )
-    parser.add_argument("-p", "--prefix", type=str, help="Prefix to append to the *.npy file names.")
+    parser.add_argument("--prefix", type=str, help="Prefix to append to the *.npy file names.")
     parser.add_argument(
-        "-r",
         "--restrict",
         type=str,
         help="Path to a .txt/.csv file with the filenames for a specific fold.",
     )
     parser.add_argument(
-        "-s",
         "--suffix",
         type=str,
         help="Suffix to append to the entries.npy file name.",
     )
-    parser.add_argument("-c", "--csv", type=str, help="Path to the csv file with samples labels.")
+    parser.add_argument("--csv", type=str, help="Path to the csv file with samples labels.")
     parser.add_argument(
-        "-f",
         "--file_name",
         type=str,
         default="filename",
         help="Name of the column holding the file names.",
     )
     parser.add_argument(
-        "-l",
         "--label_name",
         type=str,
         default="label",
         help="Name of the column holding the labels.",
     )
     parser.add_argument(
-        "-n",
         "--class_name",
         type=str,
         default="class",
@@ -186,6 +186,7 @@ def main():
     infer_entries_from_tarball(
         args.tarball_path,
         args.output_root,
+        args.cohort_name,
         restrict_filenames,
         prefix,
         suffix,

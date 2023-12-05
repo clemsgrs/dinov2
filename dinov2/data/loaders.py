@@ -10,7 +10,7 @@ from typing import Any, Callable, List, Optional, TypeVar
 import torch
 from torch.utils.data import Sampler
 
-from .datasets import ImageNet, ImageNet22k, PathologyDataset, KNNDataset
+from .datasets import ImageNet, ImageNet22k, PathologyDataset, KNNDataset, PathologyFoundationDataset
 from .samplers import EpochSampler, InfiniteSampler, ShardedInfiniteSampler
 
 
@@ -63,6 +63,11 @@ def _parse_dataset_str(dataset_str: str):
         if "fold" in kwargs:
             fold = kwargs["fold"]
             kwargs["fold"] = PathologyDataset.Fold[f"FOLD_{fold}"]
+    elif name == "PathologyFoundation":
+        class_ = PathologyFoundationDataset
+        if "fold" in kwargs:
+            fold = kwargs["fold"]
+            kwargs["fold"] = PathologyFoundationDataset.Fold[f"FOLD_{fold}"]
     elif name == "KNN":
         class_ = KNNDataset
         if "split" in kwargs:
