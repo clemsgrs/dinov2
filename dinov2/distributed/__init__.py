@@ -157,8 +157,8 @@ class _TorchDistributedEnvironment:
         self.local_rank = -1
         self.local_world_size = -1
 
-        if _is_slurm_job_process():
-            return self._set_from_slurm_env()
+        # if _is_slurm_job_process():
+        #     return self._set_from_slurm_env()
 
         env_vars = _collect_env_vars()
         if not env_vars:
