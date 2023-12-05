@@ -71,6 +71,8 @@ train:
   save_every: 3
 tune:
   tune_every:
+  query_dataset_path:
+  test_dataset_path:
   early_stopping:
     enable: false
     tracking: "auc_20"

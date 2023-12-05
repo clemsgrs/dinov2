@@ -61,11 +61,15 @@ def _parse_dataset_str(dataset_str: str):
     elif name == "Pathology":
         class_ = PathologyDataset
         if "fold" in kwargs:
-            kwargs["fold"] = PathologyDataset.Fold[kwargs["fold"]]
+            fold = kwargs["fold"]
+            kwargs["fold"] = PathologyDataset.Fold[f"FOLD_{fold}"]
     elif name == "KNN":
         class_ = KNNDataset
         if "split" in kwargs:
             kwargs["split"] = KNNDataset.Split[kwargs["split"]]
+        if "fold" in kwargs:
+            fold = kwargs["fold"]
+            kwargs["fold"] = KNNDataset.Fold[f"FOLD_{fold}"]
     else:
         raise ValueError(f'Unsupported dataset "{name}"')
 

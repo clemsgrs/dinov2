@@ -39,16 +39,16 @@ def get_args_parser(
         add_help=add_help,
     )
     parser.add_argument(
-        "--train-dataset",
-        dest="train_dataset_str",
+        "--query-dataset",
+        dest="query_dataset_str",
         type=str,
-        help="Training dataset",
+        help="Query dataset",
     )
     parser.add_argument(
-        "--val-dataset",
-        dest="val_dataset_str",
+        "--test-dataset",
+        dest="test_dataset_str",
         type=str,
-        help="Validation dataset",
+        help="Test dataset",
     )
     parser.add_argument(
         "--nb_knn",
@@ -64,7 +64,7 @@ def get_args_parser(
     parser.add_argument(
         "--gather-on-cpu",
         action="store_true",
-        help="Whether to gather the train features on cpu, slower"
+        help="Whether to gather the query features on cpu, slower"
         "but useful to avoid OOM for large datasets (e.g. ImageNet22k).",
     )
     parser.add_argument(
@@ -84,8 +84,8 @@ def get_args_parser(
         help="Number of tries",
     )
     parser.set_defaults(
-        train_dataset_str="ImageNet:split=TRAIN",
-        val_dataset_str="ImageNet:split=VAL",
+        query_dataset_str="ImageNet:split=QUERY",
+        test_dataset_str="ImageNet:split=TEST",
         nb_knn=[10, 20, 100, 200],
         temperature=0.07,
         batch_size=256,
@@ -97,32 +97,32 @@ def get_args_parser(
 
 class KnnModule(torch.nn.Module):
     """
-    Gets knn of test features from all processes on a chunk of the train features
+    Gets knn of test features from all processes on a chunk of the query features
 
-    Each rank gets a chunk of the train features as well as a chunk of the test features.
+    Each rank gets a chunk of the query features as well as a chunk of the test features.
     In `compute_neighbors`, for each rank one after the other, its chunk of test features
-    is sent to all devices, partial knns are computed with each chunk of train features
+    is sent to all devices, partial knns are computed with each chunk of query features
     then collated back on the original device.
     """
 
-    def __init__(self, train_features, train_labels, nb_knn, T, device, num_classes=1000):
+    def __init__(self, query_features, query_labels, nb_knn, T, device, num_classes=1000):
         super().__init__()
 
         self.global_rank = distributed.get_global_rank()
         self.global_size = distributed.get_global_size()
 
         self.device = device
-        self.train_features_rank_T = train_features.chunk(self.global_size)[self.global_rank].T.to(self.device)
-        self.candidates = train_labels.chunk(self.global_size)[self.global_rank].view(1, -1).to(self.device)
+        self.query_features_rank_T = query_features.chunk(self.global_size)[self.global_rank].T.to(self.device)
+        self.candidates = query_labels.chunk(self.global_size)[self.global_rank].view(1, -1).to(self.device)
 
         self.nb_knn = nb_knn
         self.max_k = max(self.nb_knn)
         self.T = T
         self.num_classes = num_classes
 
-    def _get_knn_sims_and_labels(self, similarity, train_labels):
+    def _get_knn_sims_and_labels(self, similarity, query_labels):
         topk_sims, indices = similarity.topk(self.max_k, largest=True, sorted=True)
-        neighbors_labels = torch.gather(train_labels, 1, indices)
+        neighbors_labels = torch.gather(query_labels, 1, indices)
         return topk_sims, neighbors_labels
 
     def _similarity_for_rank(self, features_rank, source_rank):
@@ -135,8 +135,8 @@ class KnnModule(torch.nn.Module):
             broadcasted = torch.zeros(*broadcast_shape, dtype=features_rank.dtype, device=self.device)
         torch.distributed.broadcast(broadcasted, source_rank)
 
-        # Compute the neighbors for `source_rank` among `train_features_rank_T`
-        similarity_rank = torch.mm(broadcasted, self.train_features_rank_T)
+        # Compute the neighbors for `source_rank` among `query_features_rank_T`
+        similarity_rank = torch.mm(broadcasted, self.query_features_rank_T)
         candidate_labels = self.candidates.expand(len(similarity_rank), -1)
         return self._get_knn_sims_and_labels(similarity_rank, candidate_labels)
 
@@ -194,26 +194,26 @@ class DictKeysModule(torch.nn.Module):
         return {"preds": features_dict, "target": targets}
 
 
-def create_module_dict(*, module, n_per_class_list, n_tries, nb_knn, train_features, train_labels):
+def create_module_dict(*, module, n_per_class_list, n_tries, nb_knn, query_features, query_labels):
     modules = {}
-    mapping = create_class_indices_mapping(train_labels)
+    mapping = create_class_indices_mapping(query_labels)
     for npc in n_per_class_list:
         if npc < 0:  # Only one try needed when using the full data
             full_module = module(
-                train_features=train_features,
-                train_labels=train_labels,
+                query_features=query_features,
+                query_labels=query_labels,
                 nb_knn=nb_knn,
             )
             modules["full"] = ModuleDictWithForward({"1": full_module})
             continue
         all_tries = {}
         for t in range(n_tries):
-            final_indices = filter_train(mapping, npc, seed=t)
+            final_indices = filter_query(mapping, npc, seed=t)
             k_list = list(set(nb_knn + [npc]))
             k_list = sorted([el for el in k_list if el <= npc])
             all_tries[str(t)] = module(
-                train_features=train_features[final_indices],
-                train_labels=train_labels[final_indices],
+                query_features=query_features[final_indices],
+                query_labels=query_labels[final_indices],
                 nb_knn=k_list,
             )
         modules[f"{npc} per class"] = ModuleDictWithForward(all_tries)
@@ -221,7 +221,7 @@ def create_module_dict(*, module, n_per_class_list, n_tries, nb_knn, train_featu
     return ModuleDictWithForward(modules)
 
 
-def filter_train(mapping, n_per_class, seed):
+def filter_query(mapping, n_per_class, seed):
     torch.manual_seed(seed)
     final_indices = []
     for k in mapping.keys():
@@ -243,8 +243,8 @@ class ModuleDictWithForward(torch.nn.ModuleDict):
 
 def eval_knn(
     model,
-    train_dataset,
-    val_dataset,
+    query_dataset,
+    test_dataset,
     accuracy_averaging,
     gpu_id,
     nb_knn,
@@ -257,14 +257,14 @@ def eval_knn(
 ):
     model = ModelWithNormalize(model)
 
-    logger.info("Extracting features for train set...")
-    train_features, train_labels = extract_features(
-        model, train_dataset, batch_size, num_workers, gpu_id, gather_on_cpu=gather_on_cpu
+    logger.info("Extracting features for query set...")
+    query_features, query_labels = extract_features(
+        model, query_dataset, batch_size, num_workers, gpu_id, gather_on_cpu=gather_on_cpu
     )
-    logger.info(f"Train features created, shape {train_features.shape}.")
+    logger.info(f"Query features created, shape {query_features.shape}.")
 
-    val_dataloader = make_data_loader(
-        dataset=val_dataset,
+    test_dataloader = make_data_loader(
+        dataset=test_dataset,
         batch_size=batch_size,
         num_workers=num_workers,
         sampler_type=SamplerType.DISTRIBUTED,
@@ -272,7 +272,7 @@ def eval_knn(
         shuffle=False,
         persistent_workers=True,
     )
-    num_classes = train_labels.max() + 1
+    num_classes = query_labels.max() + 1
     metric_collection = build_metric(num_classes=num_classes, average_type=accuracy_averaging)
 
     device = torch.cuda.current_device()
@@ -282,8 +282,8 @@ def eval_knn(
         n_per_class_list=n_per_class_list,
         n_tries=n_tries,
         nb_knn=nb_knn,
-        train_features=train_features,
-        train_labels=train_labels,
+        query_features=query_features,
+        query_labels=query_labels,
     )
     postprocessors, metrics = {}, {}
     for n_per_class, knn_module in knn_module_dict.items():
@@ -297,7 +297,7 @@ def eval_knn(
 
     # ============ evaluation ... ============
     logger.info("Start the k-NN classification.")
-    _, results_dict = evaluate(model_with_knn, val_dataloader, num_classes, postprocessors, metrics, device)
+    _, results_dict = evaluate(model_with_knn, test_dataloader, num_classes, postprocessors, metrics, device)
 
     # Averaging the results over the n tries for each value of n_per_class
     for n_per_class, knn_module in knn_module_dict.items():
@@ -318,8 +318,8 @@ def eval_knn(
 def eval_knn_with_model(
     model,
     output_dir,
-    train_dataset,
-    val_dataset,
+    query_dataset,
+    test_dataset,
     nb_knn=(10, 20, 100, 200),
     temperature=0.07,
     autocast_dtype=torch.float,
@@ -334,8 +334,8 @@ def eval_knn_with_model(
     with torch.cuda.amp.autocast(dtype=autocast_dtype):
         results_dict_knn = eval_knn(
             model=model,
-            train_dataset=train_dataset,
-            val_dataset=val_dataset,
+            query_dataset=query_dataset,
+            test_dataset=test_dataset,
             accuracy_averaging=accuracy_averaging,
             gpu_id=gpu_id,
             nb_knn=nb_knn,
@@ -372,8 +372,8 @@ def main(args):
     eval_knn_with_model(
         model=model,
         output_dir=args.output_dir,
-        train_dataset_str=args.train_dataset_str,
-        val_dataset_str=args.val_dataset_str,
+        query_dataset_str=args.query_dataset_str,
+        test_dataset_str=args.test_dataset_str,
         nb_knn=args.nb_knn,
         temperature=args.temperature,
         autocast_dtype=autocast_dtype,

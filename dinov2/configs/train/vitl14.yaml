@@ -6,11 +6,13 @@ ibot:
   head_n_prototypes: 131072
 train:
   batch_size_per_gpu: 32
-  dataset_path: Pathology:root=/root/data
+  dataset_path: Pathology:root=/root/data:fold=0
   centering: sinkhorn_knopp
   num_workers: 4
 tune:
   tune_every: 1
+  query_dataset_path: KNN:root=/root/data:split=QUERY:fold=0
+  test_dataset_path: KNN:root=/root/data:split=TEST:fold=0
   early_stopping:
     enable: false
 student:
@@ -34,7 +36,7 @@ wandb:
   project: 'vision'
   username: 'vlfm'
   exp_name: 'dinov2'
-  tags: ['dinov2']
+  tags: ['dinov2', 'vit_large']
   dir: '/home/user'
   group:
   resume_id:

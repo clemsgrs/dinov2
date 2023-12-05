@@ -158,8 +158,8 @@ def do_tune(
     cfg,
     epoch,
     model: torch.nn.Module,
-    train_dataset,
-    val_dataset,
+    query_dataset,
+    test_dataset,
     output_dir,
     gpu_id,
 ):
@@ -192,8 +192,8 @@ def do_tune(
     student_results = eval_knn_with_model(
         model=student,
         output_dir=output_dir,
-        train_dataset=train_dataset,
-        val_dataset=val_dataset,
+        query_dataset=query_dataset,
+        test_dataset=test_dataset,
         nb_knn=cfg.tune.knn.nb_knn,
         temperature=cfg.tune.knn.temperature,
         autocast_dtype=autocast_dtype,
@@ -209,8 +209,8 @@ def do_tune(
     teacher_results = eval_knn_with_model(
         model=teacher,
         output_dir=output_dir,
-        train_dataset=train_dataset,
-        val_dataset=val_dataset,
+        query_dataset=query_dataset,
+        test_dataset=test_dataset,
         nb_knn=cfg.tune.knn.nb_knn,
         temperature=cfg.tune.knn.temperature,
         autocast_dtype=autocast_dtype,
@@ -325,23 +325,16 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
     # setup tuning data
 
     if cfg.tune.tune_every:
-        tokens = cfg.train.dataset_path.split(":")
-        kwargs = {}
-        for token in tokens[1:]:
-            key, value = token.split("=")
-            assert key in ("root", "split")
-            kwargs[key] = value
-
         transform = make_classification_eval_transform()
-        train_dataset_str = f"KNN:root={kwargs['root']}:split=TRAIN"
-        val_dataset_str = f"KNN:root={kwargs['root']}:split=TEST"
+        query_dataset_str = cfg.tune.query_dataset_path
+        test_dataset_str = cfg.tune.test_dataset_path
 
-        train_dataset = make_dataset(
-            dataset_str=train_dataset_str,
+        query_dataset = make_dataset(
+            dataset_str=query_dataset_str,
             transform=transform,
         )
-        val_dataset = make_dataset(
-            dataset_str=val_dataset_str,
+        test_dataset = make_dataset(
+            dataset_str=test_dataset_str,
             transform=transform,
         )
 
@@ -451,8 +444,8 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
                     cfg,
                     epoch + 1,
                     model,
-                    train_dataset,
-                    val_dataset,
+                    query_dataset,
+                    test_dataset,
                     results_save_dir,
                     gpu_id,
                 )
@@ -499,8 +492,6 @@ def main(args):
     run_distributed = torch.cuda.device_count() > 1
     if run_distributed:
         gpu_id = int(os.environ["LOCAL_RANK"])
-        if gpu_id == 0:
-            print("Distributed session successfully initialized")
     else:
         gpu_id = -1
 

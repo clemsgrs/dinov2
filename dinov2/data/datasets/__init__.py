@@ -5,4 +5,6 @@
 
 from .image_net import ImageNet
 from .image_net_22k import ImageNet22k
-from .pathology import PathologyDataset, KNNDataset
+from .pathology import PathologyDataset
+from .knn import KNNDataset
+from .foundation import PathologyFoundationDataset
