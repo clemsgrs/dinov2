@@ -5,7 +5,7 @@ ibot:
   separate_head: true
   head_n_prototypes: 131072
 train:
-  batch_size_per_gpu: 32
+  batch_size_per_gpu: 8
   dataset_path: Pathology:root=/root/data:fold=0
   centering: sinkhorn_knopp
   num_workers: 8
