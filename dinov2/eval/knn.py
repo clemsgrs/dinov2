@@ -330,6 +330,7 @@ def eval_knn_with_model(
     num_workers=5,
     n_per_class_list=[-1],
     n_tries=1,
+    model_name: Optional[str] = None,
 ):
     with torch.cuda.amp.autocast(dtype=autocast_dtype):
         results_dict_knn = eval_knn(
@@ -355,15 +356,21 @@ def eval_knn_with_model(
             auc = results_dict_knn[knn_]["auc"].item()
             results_dict[f"{k} Accuracy"] = acc
             results_dict[f"{k} AUC"] = auc
-            logger.info(f"{k}-NN classifier result: Accuracy: {acc:.2f} | AUC: {auc:.2f}")
+            if model_name:
+                logger.info(f"{model_name.title()} | {k}-NN classifier result: Accuracy: {acc:.2f} | AUC: {auc:.2f}")
+            else:
+                logger.info(f"{k}-NN classifier result: Accuracy: {acc:.2f} | AUC: {auc:.2f}")
 
-    metrics_file_path = Path(output_dir, "results_eval_knn.json")
-    with open(metrics_file_path, "a") as f:
-        for k, v in results_dict.items():
-            f.write(json.dumps({k: v}) + "\n")
+        metrics_file_path = Path(output_dir, "results_eval_knn.json")
+        with open(metrics_file_path, "a") as f:
+            for k, v in results_dict.items():
+                if model_name:
+                    k = f"{model_name.title()} {k}"
+                f.write(json.dumps({k: v}) + "\n")
 
     if distributed.is_enabled():
         torch.distributed.barrier()
+
     return results_dict
 
 

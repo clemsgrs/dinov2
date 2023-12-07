@@ -66,7 +66,7 @@ class MetricLogger(object):
         pass
 
     def log_every(
-        self, iterable, print_freq, gpu_id, header=None, n_iterations=None, start_iteration=0, print_log: bool = False
+        self, iterable, print_freq, gpu_id, header=None, n_iterations=None, start_iteration=0, print_log: bool = True
     ):
         i = start_iteration
         if not header:
@@ -79,30 +79,15 @@ class MetricLogger(object):
         if n_iterations is None:
             n_iterations = len(iterable)
 
-        space_fmt = ":" + str(len(str(n_iterations))) + "d"
-
-        log_list = [
-            header,
-            "[{0" + space_fmt + "}/{1}]",
-            "eta: {eta}",
-            "{meters}",
-            "time: {time}",
-            "data: {data}",
-        ]
-        if torch.cuda.is_available():
-            log_list += ["max mem: {memory:.0f}"]
-
-        log_msg = self.delimiter.join(log_list)
-        MB = 1024.0 * 1024.0
-
         tqdm_iterable = tqdm.tqdm(
             iterable,
             desc=(f"{header}"),
-            unit=" img",
+            unit=" it",
             ncols=80,
-            unit_scale=iterable.batch_size,
+            unit_scale=1,
+            initial=start_iteration,
             total=n_iterations,
-            leave=False,
+            leave=True,
             file=sys.stdout,
             disable=not (gpu_id in [-1, 0]),
         )
@@ -113,31 +98,6 @@ class MetricLogger(object):
             iter_time.update(time.time() - end)
             if (i % print_freq == 0 or i == n_iterations - 1) and print_log:
                 self.dump_in_output_file(iteration=i, iter_time=iter_time.avg, data_time=data_time.avg)
-                eta_seconds = iter_time.global_avg * (n_iterations - i)
-                eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
-                if torch.cuda.is_available():
-                    logger.info(
-                        log_msg.format(
-                            i,
-                            n_iterations,
-                            eta=eta_string,
-                            meters=str(self),
-                            time=str(iter_time),
-                            data=str(data_time),
-                            memory=torch.cuda.max_memory_allocated() / MB,
-                        )
-                    )
-                else:
-                    logger.info(
-                        log_msg.format(
-                            i,
-                            n_iterations,
-                            eta=eta_string,
-                            meters=str(self),
-                            time=str(iter_time),
-                            data=str(data_time),
-                        )
-                    )
             i += 1
             end = time.time()
             if i >= n_iterations:

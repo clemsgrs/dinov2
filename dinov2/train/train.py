@@ -147,10 +147,10 @@ def do_test(cfg, model, iteration):
 
     if distributed.is_main_process():
         iterstring = str(iteration)
-        eval_dir = os.path.join(cfg.train.output_dir, "eval", iterstring)
-        os.makedirs(eval_dir, exist_ok=True)
+        eval_dir = Path(cfg.train.output_dir, "eval", iterstring)
+        eval_dir.mkdir(exist_ok=True)
         # save teacher checkpoint
-        teacher_ckp_path = os.path.join(eval_dir, "teacher_checkpoint.pth")
+        teacher_ckp_path = Path(eval_dir, "teacher_checkpoint.pth")
         torch.save({"teacher": new_state_dict}, teacher_ckp_path)
 
 
@@ -204,6 +204,7 @@ def do_tune(
         num_workers=4,
         n_per_class_list=cfg.tune.knn.n_per_class_list,
         n_tries=cfg.tune.knn.n_tries,
+        model_name="student",
     )
 
     teacher_results = eval_knn_with_model(
@@ -221,18 +222,20 @@ def do_tune(
         num_workers=4,
         n_per_class_list=cfg.tune.knn.n_per_class_list,
         n_tries=cfg.tune.knn.n_tries,
+        model_name="teacher",
     )
 
     #######
 
     results = defaultdict(dict)
-    for k in cfg.tune.knn.nb_knn:
-        student_acc = student_results[f"{k} Accuracy"]
-        student_auc = student_results[f"{k} AUC"]
-        teacher_acc = teacher_results[f"{k} Accuracy"]
-        teacher_auc = teacher_results[f"{k} AUC"]
-        results["student"].update({f"acc_{k}": student_acc, f"auc_{k}": student_auc})
-        results["teacher"].update({f"acc_{k}": teacher_acc, f"auc_{k}": teacher_auc})
+    if distributed.is_main_process():
+        for k in cfg.tune.knn.nb_knn:
+            student_acc = student_results[f"{k} Accuracy"]
+            student_auc = student_results[f"{k} AUC"]
+            teacher_acc = teacher_results[f"{k} Accuracy"]
+            teacher_auc = teacher_results[f"{k} AUC"]
+            results["student"].update({f"acc_{k}": student_acc, f"auc_{k}": student_auc})
+            results["teacher"].update({f"acc_{k}": teacher_acc, f"auc_{k}": teacher_auc})
 
     return results
 
@@ -455,15 +458,15 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
                         for name, value in metrics_dict.items():
                             update_log_dict(log_dict, f"tune/{model_name}.{name}", value, step="epoch")
 
-            if distributed.is_main_process():
-                early_stopper(epoch, tune_results, checkpointer, run_distributed, iteration)
-                if early_stopper.early_stop and cfg.tune.early_stopping.enable:
-                    stop = True
+            early_stopper(epoch, tune_results, periodic_checkpointer, run_distributed, iteration)
+            if early_stopper.early_stop and cfg.tune.early_stopping.enable:
+                stop = True
 
         if stop:
-            tqdm.tqdm.write(
-                f"Stopping early because best {cfg.tune.early_stopping.tracking} was reached {cfg.tune.early_stopping.patience} epochs ago"
-            )
+            if distributed.is_main_process():
+                tqdm.tqdm.write(
+                    f"Stopping early because best {cfg.tune.early_stopping.tracking} was reached {cfg.tune.early_stopping.patience} epochs ago"
+                )
             break
 
         # save snapshot and log to wandb

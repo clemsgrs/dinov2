@@ -182,7 +182,8 @@ class EarlyStoppingDINO:
         self.early_stop = False
 
     def __call__(self, epoch, results, checkpointer, run_distributed, iteration):
-        if results is not None:
+        save_best = False
+        if results is not None and len(results) > 0:
             teacher_score = results["teacher"][f"{self.tracking}"]
             student_score = results["student"][f"{self.tracking}"]
 
@@ -190,13 +191,13 @@ class EarlyStoppingDINO:
                 teacher_score = -1 * teacher_score
                 student_score = -1 * student_score
 
-            if self.best_score is None or (teacher_score >= self.best_score and teacher_score > student_score):
+            if self.best_score is None or (teacher_score > self.best_score and teacher_score > student_score):
                 self.best_score = teacher_score
                 fname = "best"
-                checkpointer.save(fname, run_distributed=run_distributed, iteration=iteration)
+                save_best = True
                 self.counter = 0
 
-            elif teacher_score < self.best_score or teacher_score <= student_score:
+            elif teacher_score <= self.best_score or teacher_score <= student_score:
                 self.counter += 1
                 if epoch <= self.min_epoch + 1 and self.verbose:
                     tqdm.tqdm.write(f"EarlyStopping counter: {min(self.counter,self.patience)}/{self.patience}")
@@ -204,6 +205,19 @@ class EarlyStoppingDINO:
                     tqdm.tqdm.write(f"EarlyStopping counter: {self.counter}/{self.patience}")
                 if self.counter >= self.patience and epoch > self.min_epoch:
                     self.early_stop = True
+
+        torch.distributed.barrier()
+
+        save_best_tensor = torch.tensor(save_best, dtype=torch.bool).cuda()
+        # broadcast the tensor from the main process (rank 0) to all others
+        torch.distributed.broadcast(save_best_tensor, src=0)
+        # convert the tensor back to a boolean
+        save_best = save_best_tensor.item()
+
+        if save_best:
+            checkpointer.save("best", run_distributed=run_distributed, iteration=iteration)
+
+        torch.distributed.barrier()
 
         # override latest
         fname = "latest"
