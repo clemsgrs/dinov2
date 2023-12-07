@@ -58,6 +58,7 @@ class PathologyFoundationDataset(VisionDataset):
         super().__init__(root, transforms, transform, target_transform)
         self._fold = fold
         self._get_entries()
+        self._get_cohort_names()
         self._mmap_tarball = _make_mmap_tarball(self._tarballs_root, mmap_cache_size)
 
     @property
@@ -86,9 +87,17 @@ class PathologyFoundationDataset(VisionDataset):
         filepaths_dict_path = Path(self.root, f"{cohort_name}_file_indices.npy")
         return np.load(filepaths_dict_path, allow_pickle=True).item()
 
+    def _get_cohort_names(self) -> dict:
+        self._cohort_names = self._load_cohort_names()
+
+    def _load_cohort_names(self) -> dict:
+        cohort_dict_path = Path(self.root, "cohort_indices.npy")
+        return np.load(cohort_dict_path, allow_pickle=True).item()
+
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
-        cohort_name, file_idx, start_offset, end_offset = entry[4], entry[1], entry[2], entry[3]
+        file_idx, start_offset, end_offset, cohort_idx = entry[1], entry[2], entry[3], entry[4]
+        cohort_name = self._cohort_names[cohort_idx]
         filepaths_dict = self._get_filepaths_dict(cohort_name)
         filepath = filepaths_dict[file_idx]
         class_mmap = self._mmap_tarball(cohort_name)
