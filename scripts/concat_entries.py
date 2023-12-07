@@ -13,7 +13,13 @@ def concat_entries(
     suffix: Optional[str] = None,
 ):
     try:
+        cohort_indices = {}  # store cohort names with an index
         concat_entries = np.load(entries_paths[0])
+        cohort_index_column = np.full((concat_entries.shape[0], 1), 0)
+        concat_entries = np.hstack([concat_entries, cohort_index_column])
+        cohort_name = entries_paths[0].stem.split("_")[0]
+        cohort_indices[0] = cohort_name
+
         # load and concatenate the rest of the files
         with tqdm.tqdm(
             entries_paths[1:],
@@ -23,11 +29,19 @@ def concat_entries(
             total=len(entries_paths),
             leave=True,
         ) as t:
-            for e in t:
+            for i, e in enumerate(t):
                 data = np.load(e)
+                cohort_index_column = np.full((data.shape[0], 1), i + 1)
+                data = np.hstack([data, cohort_index_column])
+                cohort_name = e.stem.split("_")[0]
+                cohort_indices[i + 1] = cohort_name
                 concat_entries = np.concatenate((concat_entries, data))
 
-        # save entries
+        # save cohort indices
+        cohort_indices_filepath = Path(output_root, "cohort_indices.npy")
+        np.save(cohort_indices_filepath, cohort_indices)
+
+        # save concatenated entries
         if prefix:
             if suffix:
                 entries_filepath = Path(output_root, f"{prefix}_entries_{suffix}.npy")

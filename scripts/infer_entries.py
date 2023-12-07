@@ -27,7 +27,6 @@ def parse_tar_header(header_bytes):
 def infer_entries_from_tarball(
     tarball_path,
     output_root,
-    cohort_name: str = "unspecified",
     restrict_filenames: Optional[List[str]] = None,
     prefix: Optional[str] = None,
     suffix: Optional[str] = None,
@@ -82,7 +81,7 @@ def infer_entries_from_tarball(
                     class_index = df[df[file_name] == filename][label_name].values[0]
                 start_offset = f.tell()
                 end_offset = start_offset + size
-                entries.append([class_index, file_index, start_offset, end_offset, cohort_name])
+                entries.append([class_index, file_index, start_offset, end_offset])
 
             file_index += 1
 
@@ -126,12 +125,6 @@ def main():
         type=str,
         required=True,
         help="Path to the tarball file.",
-    )
-    parser.add_argument(
-        "--cohort_name",
-        type=str,
-        default="unspecified",
-        help="Name given to the tarball data.",
     )
     parser.add_argument(
         "--output_root",
@@ -186,7 +179,6 @@ def main():
     infer_entries_from_tarball(
         args.tarball_path,
         args.output_root,
-        args.cohort_name,
         restrict_filenames,
         prefix,
         suffix,
