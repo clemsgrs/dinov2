@@ -75,8 +75,7 @@ def build_optimizer(cfg, params_groups):
     return torch.optim.AdamW(params_groups, betas=(cfg.optim.adamw_beta1, cfg.optim.adamw_beta2))
 
 
-def build_schedulers(cfg):
-    OFFICIAL_EPOCH_LENGTH = cfg.train.OFFICIAL_EPOCH_LENGTH
+def build_schedulers(cfg, OFFICIAL_EPOCH_LENGTH):
     lr = dict(
         base_value=cfg.optim["lr"],
         final_value=cfg.optim["min_lr"],
@@ -148,7 +147,7 @@ def do_test(cfg, model, iteration):
     if distributed.is_main_process():
         iterstring = str(iteration)
         eval_dir = Path(cfg.train.output_dir, "eval", iterstring)
-        eval_dir.mkdir(exist_ok=True)
+        eval_dir.mkdir(exist_ok=True, parents=True)
         # save teacher checkpoint
         teacher_ckp_path = Path(eval_dir, "teacher_checkpoint.pth")
         torch.save({"teacher": new_state_dict}, teacher_ckp_path)
@@ -251,13 +250,6 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
 
     # setup optimizer
     optimizer = build_optimizer(cfg, model.get_params_groups())
-    (
-        lr_schedule,
-        wd_schedule,
-        momentum_schedule,
-        teacher_temp_schedule,
-        last_layer_lr_schedule,
-    ) = build_schedulers(cfg)
 
     # checkpointer
     checkpoint_save_dir = Path(cfg.train.output_dir, "checkpoints")
@@ -266,16 +258,6 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
     checkpointer = FSDPCheckpointer(model, str(checkpoint_save_dir), optimizer=optimizer, save_to_disk=True)
 
     start_iter = checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get("iteration", -1) + 1
-
-    OFFICIAL_EPOCH_LENGTH = cfg.train.OFFICIAL_EPOCH_LENGTH
-    max_iter = cfg.optim.epochs * OFFICIAL_EPOCH_LENGTH
-
-    periodic_checkpointer = PeriodicCheckpointer(
-        checkpointer,
-        period=cfg.train.save_every * OFFICIAL_EPOCH_LENGTH,
-        max_iter=max_iter,
-        max_to_keep=3,
-    )
 
     # setup data preprocessing
 
@@ -324,6 +306,26 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
         drop_last=True,
         collate_fn=collate_fn,
     )
+
+    total_batch_size = cfg.train.batch_size_per_gpu * distributed.get_global_size()
+    OFFICIAL_EPOCH_LENGTH = len(dataset) // total_batch_size
+    max_iter = cfg.optim.epochs * OFFICIAL_EPOCH_LENGTH
+
+    periodic_checkpointer = PeriodicCheckpointer(
+        checkpointer,
+        period=cfg.train.save_every * OFFICIAL_EPOCH_LENGTH,
+        max_iter=max_iter,
+        max_to_keep=3,
+    )
+
+    # setup schedulers
+    (
+        lr_schedule,
+        wd_schedule,
+        momentum_schedule,
+        teacher_temp_schedule,
+        last_layer_lr_schedule,
+    ) = build_schedulers(cfg, OFFICIAL_EPOCH_LENGTH)
 
     # setup tuning data
 
@@ -430,7 +432,7 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
 
         # log at the end of each epoch
         if iteration % OFFICIAL_EPOCH_LENGTH == 0:
-            if cfg.wandb.enable:
+            if distributed.is_main_process() and cfg.wandb.enable:
                 # log the total loss and each individual loss to wandb
                 log_dict = {"epoch": epoch}
                 update_log_dict(log_dict, f"{header.lower()}/lr", lr, step="epoch")

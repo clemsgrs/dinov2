@@ -64,8 +64,7 @@ train:
   output_dir: .
   saveckp_freq: 20
   seed: 0
-  num_workers: 10
-  OFFICIAL_EPOCH_LENGTH: 1250
+  num_workers: 8
   cache_dataset: true
   centering: "centering" # or "sinkhorn_knopp"
   save_every: 3

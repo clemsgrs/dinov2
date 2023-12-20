@@ -327,7 +327,7 @@ def eval_knn_with_model(
     gpu_id=-1,
     gather_on_cpu=False,
     batch_size=256,
-    num_workers=5,
+    num_workers=4,
     n_per_class_list=[-1],
     n_tries=1,
     model_name: Optional[str] = None,

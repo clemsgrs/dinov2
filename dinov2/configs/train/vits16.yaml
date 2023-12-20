@@ -8,7 +8,7 @@ train:
   centering: sinkhorn_knopp
   num_workers: 8
 tune:
-  tune_every: 1
+  tune_every:
   query_dataset_path: KNN:root=/root/data:split=QUERY:fold=0
   test_dataset_path: KNN:root=/root/data:split=TEST:fold=0
   early_stopping:
@@ -24,11 +24,11 @@ teacher:
 optim:
   epochs: 100
   weight_decay_end: 0.2
-  base_lr: 2.0e-04  # learning rate for a batch size of 1024
+  base_lr: 2.0e-04 # learning rate for a batch size of 1024, will get scaled in apply_scaling_rules_to_cfg
   warmup_epochs: 80
   layerwise_decay: 1.0
 wandb:
-  enable: false
+  enable: true
   project: 'vision'
   username: 'vlfm'
   exp_name: 'dinov2'
