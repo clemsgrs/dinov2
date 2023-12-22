@@ -10,7 +10,7 @@ import torch
 from torch import nn
 
 from dinov2.loss import DINOLoss, iBOTPatchLoss, KoLeoLoss
-from dinov2.models import build_model_from_cfg
+from dinov2.models import build_model_from_cfg, update_state_dict
 from dinov2.layers import DINOHead
 from dinov2.utils.utils import has_batchnorms
 from dinov2.utils.param_groups import get_params_groups_with_decay, fuse_params_groups
@@ -45,7 +45,10 @@ class SSLMetaArch(nn.Module):
         if cfg.student.pretrained_weights:
             chkpt = torch.load(cfg.student.pretrained_weights)
             logger.info(f"OPTIONS -- pretrained weights: loading from {cfg.student.pretrained_weights}")
-            student_backbone.load_state_dict(chkpt["model"], strict=False)
+            sd = chkpt["model"]
+            sd, msg = update_state_dict(student_backbone.state_dict(), sd)
+            logger.info(f"pretrained weights loaded: {msg}")
+            student_backbone.load_state_dict(sd, strict=False)
 
         self.embed_dim = embed_dim
         self.dino_out_dim = cfg.dino.head_n_prototypes

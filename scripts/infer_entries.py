@@ -173,7 +173,7 @@ def main():
         print(f"Done: {len(set(restrict_filenames))} unique files found")
 
     prefix = f"{args.prefix}" if args.prefix else None
-    suffix = f"{args.suffix}" if args.restrict and args.suffix else None
+    suffix = f"{args.suffix}" if args.suffix else None
 
     df = pd.read_csv(args.csv) if args.csv else None
     infer_entries_from_tarball(

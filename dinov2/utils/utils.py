@@ -8,7 +8,6 @@ import os
 import wandb
 import random
 import subprocess
-import torch.distributed as dist
 from urllib.parse import urlparse
 from typing import Optional
 from omegaconf import DictConfig, OmegaConf
@@ -111,24 +110,6 @@ def has_batchnorms(model):
         if isinstance(module, bn_types):
             return True
     return False
-
-
-def is_dist_avail_and_initialized():
-    if not dist.is_available():
-        return False
-    if not dist.is_initialized():
-        return False
-    return True
-
-
-def get_rank():
-    if not is_dist_avail_and_initialized():
-        return 0
-    return dist.get_rank()
-
-
-def is_main_process():
-    return get_rank() == 0
 
 
 def write_dictconfig(d, f, child: bool = False, ntab=0):

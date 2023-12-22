@@ -41,3 +41,18 @@ def build_model(args, only_teacher=False, img_size=224):
 
 def build_model_from_cfg(cfg, only_teacher=False):
     return build_model(cfg.student, only_teacher=only_teacher, img_size=cfg.crops.global_crops_size)
+
+
+def update_state_dict(model_dict, state_dict):
+    success, failure = 0, 0
+    updated_state_dict = {}
+    for k, v in zip(model_dict.keys(), state_dict.values()):
+        if v.size() != model_dict[k].size():
+            updated_state_dict[k] = model_dict[k]
+            failure += 1
+            print(f"{k} | ckpt size: {v.size()} | model size: {model_dict[k].size()}")
+        else:
+            updated_state_dict[k] = v
+            success += 1
+    msg = f"{success} weight(s) loaded succesfully ; {failure} weight(s) not loaded because of mismatching shapes"
+    return updated_state_dict, msg
