@@ -3,19 +3,23 @@ dino:
 ibot:
   separate_head: true
 train:
-  batch_size_per_gpu: 8
+  batch_size_per_gpu: 128
   dataset_path: Pathology:root=/root/data:fold=0
   centering: sinkhorn_knopp
   num_workers: 8
 tune:
-  tune_every:
+  tune_every: 1
   query_dataset_path: KNN:root=/root/data:split=QUERY:fold=0
   test_dataset_path: KNN:root=/root/data:split=TEST:fold=0
   early_stopping:
     enable: false
+  knn:
+    batch_size: 64
 student:
   arch: vit_small
   patch_size: 16
+  num_register_tokens: 0
+  pretrained_weights:
   drop_path_rate: 0.4
   ffn_layer: swiglufused
   block_chunks: 4
@@ -24,15 +28,17 @@ teacher:
 optim:
   epochs: 100
   weight_decay_end: 0.2
-  base_lr: 2.0e-04 # learning rate for a batch size of 1024, will get scaled in apply_scaling_rules_to_cfg
-  warmup_epochs: 80
+  base_lr: 2.0e-03 # learning rate for a batch size of 1024, will get scaled in apply_scaling_rules_to_cfg
+  warmup_epochs: 16
   layerwise_decay: 1.0
+crops:
+  local_crops_size: 98
 wandb:
   enable: true
   project: 'vision'
   username: 'vlfm'
   exp_name: 'dinov2'
-  tags: ['dinov2', 'patch', '${student.arch}']
+  tags: ['${wandb.exp_name}', 'patch', '${student.arch}']
   dir: '/home/user'
   group:
   resume_id:

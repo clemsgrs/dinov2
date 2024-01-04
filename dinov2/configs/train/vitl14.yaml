@@ -38,7 +38,7 @@ wandb:
   project: 'vision'
   username: 'vlfm'
   exp_name: 'dinov2'
-  tags: ['dinov2', 'patch', '${student.arch}']
+  tags: ['${wandb.exp_name}', 'patch', '${student.arch}']
   dir: '/home/user'
   group:
   resume_id:

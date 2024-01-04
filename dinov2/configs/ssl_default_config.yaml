@@ -67,7 +67,7 @@ train:
   num_workers: 8
   cache_dataset: true
   centering: "centering" # or "sinkhorn_knopp"
-  save_every: 3
+  save_every: 5
 tune:
   tune_every:
   query_dataset_path:
