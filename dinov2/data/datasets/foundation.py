@@ -4,7 +4,6 @@ from functools import lru_cache
 # from gzip import GzipFile
 # from io import BytesIO
 from mmap import ACCESS_READ, mmap
-import os
 from typing import Any, Callable, Optional, Tuple
 from torchvision.datasets import VisionDataset
 from pathlib import Path
@@ -35,7 +34,7 @@ def _make_mmap_tarball(tarballs_root: str, mmap_cache_size: int):
     @lru_cache(maxsize=mmap_cache_size)
     def _mmap_tarball(cohort_name: str) -> mmap:
         tarball_path = _get_tarball_path(cohort_name)
-        tarball_full_path = os.path.join(tarballs_root, tarball_path)
+        tarball_full_path = Path(tarballs_root, tarball_path)
         with open(tarball_full_path) as f:
             return mmap(fileno=f.fileno(), length=0, access=ACCESS_READ)
 

@@ -56,6 +56,7 @@ def evaluate(
     metrics: Dict[str, MetricCollection],
     device: torch.device,
     criterion: Optional[nn.Module] = None,
+    verbose: bool = True,
 ):
     model.eval()
     if criterion is not None:
@@ -64,7 +65,7 @@ def evaluate(
     for metric in metrics.values():
         metric = metric.to(device)
 
-    metric_logger = MetricLogger(delimiter="  ")
+    metric_logger = MetricLogger(delimiter="  ", verbose=verbose)
     header = "Test"
 
     for samples, targets, *_ in metric_logger.log_every(data_loader, 10, device, header):
@@ -81,7 +82,8 @@ def evaluate(
             metric.update(**metric_inputs)
 
     metric_logger.synchronize_between_processes()
-    logger.info(f"Averaged stats: {metric_logger}")
+    if verbose:
+        logger.info(f"Averaged stats: {metric_logger}")
 
     stats = {k: metric.compute() for k, metric in metrics.items()}
     metric_logger_stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
@@ -100,7 +102,9 @@ def all_gather_and_flatten(tensor_rank):
     return tensor_all_ranks.flatten(end_dim=1)
 
 
-def extract_features(model, dataset, batch_size, num_workers, gpu_id, gather_on_cpu=False):
+def extract_features(
+    model, dataset, batch_size, num_workers, gpu_id, gather_on_cpu=False, header: str = "", verbose: bool = True
+):
     dataset_with_enumerated_targets = DatasetWithEnumeratedTargets(dataset)
     sample_count = len(dataset_with_enumerated_targets)
     data_loader = make_data_loader(
@@ -111,15 +115,19 @@ def extract_features(model, dataset, batch_size, num_workers, gpu_id, gather_on_
         drop_last=False,
         shuffle=False,
     )
-    return extract_features_with_dataloader(model, data_loader, sample_count, gpu_id, gather_on_cpu)
+    return extract_features_with_dataloader(
+        model, data_loader, sample_count, gpu_id, gather_on_cpu, header=header, verbose=verbose
+    )
 
 
 @torch.inference_mode()
-def extract_features_with_dataloader(model, data_loader, sample_count, gpu_id, gather_on_cpu=False):
+def extract_features_with_dataloader(
+    model, data_loader, sample_count, gpu_id, gather_on_cpu=False, header: str = "", verbose: bool = True
+):
     gather_device = torch.device("cpu") if gather_on_cpu else torch.device("cuda")
-    metric_logger = MetricLogger(delimiter="  ")
+    metric_logger = MetricLogger(delimiter="  ", verbose=verbose)
     features, all_labels = None, None
-    for samples, (index, labels_rank) in metric_logger.log_every(data_loader, 10, gpu_id):
+    for samples, (index, labels_rank) in metric_logger.log_every(data_loader, 10, gpu_id, header):
         samples = samples.cuda(non_blocking=True)
         labels_rank = labels_rank.cuda(non_blocking=True)
         index = index.cuda(non_blocking=True)
@@ -131,7 +139,8 @@ def extract_features_with_dataloader(model, data_loader, sample_count, gpu_id, g
             labels_shape = list(labels_rank.shape)
             labels_shape[0] = sample_count
             all_labels = torch.full(labels_shape, fill_value=-1, device=gather_device)
-            logger.info(f"Storing features into tensor of shape {features.shape}")
+            if verbose:
+                logger.info(f"Storing features into tensor of shape {features.shape}")
 
         # share indexes, features and labels between processes
         index_all = all_gather_and_flatten(index).to(gather_device)
@@ -143,8 +152,10 @@ def extract_features_with_dataloader(model, data_loader, sample_count, gpu_id, g
             features.index_copy_(0, index_all, features_all_ranks)
             all_labels.index_copy_(0, index_all, labels_all_ranks)
 
-    logger.info(f"Features shape: {tuple(features.shape)}")
-    logger.info(f"Labels shape: {tuple(all_labels.shape)}")
+    if verbose:
+        logger.info(f"Features shape: {tuple(features.shape)}")
+    if verbose:
+        logger.info(f"Labels shape: {tuple(all_labels.shape)}")
 
     assert torch.all(all_labels > -1)
 

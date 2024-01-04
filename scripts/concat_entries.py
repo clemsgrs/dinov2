@@ -76,10 +76,10 @@ def main():
     args = parser.parse_args()
 
     prefix = f"{args.prefix}" if args.prefix else None
-    suffix = f"{args.suffix}" if args.restrict and args.suffix else None
+    suffix = f"{args.suffix}" if args.suffix else None
 
     # grab all entries
-    entries_paths = [fp for fp in Path(args.root).glob("*.npy") if "entries" in str(fp)]
+    entries_paths = sorted([fp for fp in Path(args.root).glob("*.npy") if "entries" in str(fp.name)])
     assert len(entries_paths) > 0, f"0 entry file found under {args.root}"
     print(f"{len(entries_paths)} entry files found!")
 
@@ -87,4 +87,5 @@ def main():
 
 
 if __name__ == "__main__":
+    # python scripts/concat_entries.py --root /root/data --output_root /root/data
     main()
