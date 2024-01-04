@@ -122,11 +122,13 @@ def _make_sampler(
     seed: int = 0,
     size: int = -1,
     advance: int = 0,
+    verbose: bool = True,
 ) -> Optional[Sampler]:
     sample_count = len(dataset)
 
     if type == SamplerType.INFINITE:
-        logger.info("sampler: infinite")
+        if verbose:
+            logger.info("sampler: infinite")
         if size > 0:
             raise ValueError("sampler size > 0 is invalid")
         return InfiniteSampler(
@@ -136,7 +138,8 @@ def _make_sampler(
             advance=advance,
         )
     elif type in (SamplerType.SHARDED_INFINITE, SamplerType.SHARDED_INFINITE_NEW):
-        logger.info("sampler: sharded infinite")
+        if verbose:
+            logger.info("sampler: sharded infinite")
         if size > 0:
             raise ValueError("sampler size > 0 is invalid")
         # TODO: Remove support for old shuffling
@@ -149,7 +152,8 @@ def _make_sampler(
             use_new_shuffle_tensor_slice=use_new_shuffle_tensor_slice,
         )
     elif type == SamplerType.EPOCH:
-        logger.info("sampler: epoch")
+        if verbose:
+            logger.info("sampler: epoch")
         if advance > 0:
             raise NotImplementedError("sampler advance > 0 is not supported")
         size = size if size > 0 else sample_count
@@ -161,7 +165,8 @@ def _make_sampler(
             seed=seed,
         )
     elif type == SamplerType.DISTRIBUTED:
-        logger.info("sampler: distributed")
+        if verbose:
+            logger.info("sampler: distributed")
         if size > 0:
             raise ValueError("sampler size > 0 is invalid")
         if advance > 0:
@@ -173,7 +178,8 @@ def _make_sampler(
             drop_last=False,
         )
 
-    logger.info("sampler: none")
+    if verbose:
+        logger.info("sampler: none")
     return None
 
 
@@ -193,6 +199,7 @@ def make_data_loader(
     drop_last: bool = True,
     persistent_workers: bool = False,
     collate_fn: Optional[Callable[[List[T]], Any]] = None,
+    verbose: bool = False,
 ):
     """
     Creates a data loader with the specified parameters.
@@ -218,9 +225,11 @@ def make_data_loader(
         seed=seed,
         size=sampler_size,
         advance=sampler_advance,
+        verbose=verbose,
     )
 
-    logger.info("using PyTorch data loader")
+    if verbose:
+        logger.info("using PyTorch data loader")
     data_loader = torch.utils.data.DataLoader(
         dataset,
         sampler=sampler,
@@ -232,8 +241,9 @@ def make_data_loader(
         collate_fn=collate_fn,
     )
 
-    try:
-        logger.info(f"# of batches: {len(data_loader):,d}")
-    except TypeError:  # data loader has no length
-        logger.info("infinite data loader")
+    if verbose:
+        try:
+            logger.info(f"# of batches: {len(data_loader):,d}")
+        except TypeError:  # data loader has no length
+            logger.info("infinite data loader")
     return data_loader

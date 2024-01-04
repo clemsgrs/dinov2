@@ -254,14 +254,25 @@ def eval_knn(
     gather_on_cpu,
     n_per_class_list=[-1],
     n_tries=1,
+    persistent_workers: bool = True,
+    verbose: bool = True,
 ):
     model = ModelWithNormalize(model)
 
-    logger.info("Extracting features for query set...")
+    if verbose:
+        logger.info("Extracting features for query set...")
     query_features, query_labels = extract_features(
-        model, query_dataset, batch_size, num_workers, gpu_id, gather_on_cpu=gather_on_cpu
+        model,
+        query_dataset,
+        batch_size,
+        num_workers,
+        gpu_id,
+        gather_on_cpu=gather_on_cpu,
+        header="Query",
+        verbose=verbose,
     )
-    logger.info(f"Query features created, shape {query_features.shape}.")
+    if verbose:
+        logger.info(f"Query features created, shape {query_features.shape}.")
 
     test_dataloader = make_data_loader(
         dataset=test_dataset,
@@ -270,7 +281,8 @@ def eval_knn(
         sampler_type=SamplerType.DISTRIBUTED,
         drop_last=False,
         shuffle=False,
-        persistent_workers=True,
+        persistent_workers=persistent_workers,
+        verbose=verbose,
     )
     num_classes = query_labels.max() + 1
     metric_collection = build_metric(num_classes=num_classes, average_type=accuracy_averaging)
@@ -296,8 +308,11 @@ def eval_knn(
     model_with_knn = torch.nn.Sequential(model, knn_module_dict)
 
     # ============ evaluation ... ============
-    logger.info("Start the k-NN classification.")
-    _, results_dict = evaluate(model_with_knn, test_dataloader, num_classes, postprocessors, metrics, device)
+    if verbose:
+        logger.info("Start the k-NN classification.")
+    _, results_dict = evaluate(
+        model_with_knn, test_dataloader, num_classes, postprocessors, metrics, device, verbose=verbose
+    )
 
     # Averaging the results over the n tries for each value of n_per_class
     for n_per_class, knn_module in knn_module_dict.items():
@@ -330,7 +345,9 @@ def eval_knn_with_model(
     num_workers=4,
     n_per_class_list=[-1],
     n_tries=1,
+    persistent_workers: bool = True,
     model_name: Optional[str] = None,
+    verbose: bool = False,
 ):
     with torch.cuda.amp.autocast(dtype=autocast_dtype):
         results_dict_knn = eval_knn(
@@ -346,6 +363,8 @@ def eval_knn_with_model(
             gather_on_cpu=gather_on_cpu,
             n_per_class_list=n_per_class_list,
             n_tries=n_tries,
+            persistent_workers=persistent_workers,
+            verbose=verbose,
         )
 
     results_dict = {}
@@ -356,9 +375,9 @@ def eval_knn_with_model(
             auc = results_dict_knn[knn_]["auc"].item()
             results_dict[f"{k} Accuracy"] = acc
             results_dict[f"{k} AUC"] = auc
-            if model_name:
+            if model_name and verbose:
                 logger.info(f"{model_name.title()} | {k}-NN classifier result: Accuracy: {acc:.2f} | AUC: {auc:.2f}")
-            else:
+            elif verbose:
                 logger.info(f"{k}-NN classifier result: Accuracy: {acc:.2f} | AUC: {auc:.2f}")
 
         metrics_file_path = Path(output_dir, "results_eval_knn.json")

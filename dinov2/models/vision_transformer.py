@@ -65,6 +65,7 @@ class DinoVisionTransformer(nn.Module):
         num_register_tokens=0,
         interpolate_antialias=False,
         interpolate_offset=0.1,
+        verbose: bool = False,
     ):
         """
         Args:
@@ -119,13 +120,16 @@ class DinoVisionTransformer(nn.Module):
             dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
         if ffn_layer == "mlp":
-            logger.info("using MLP layer as FFN")
+            if verbose:
+                logger.info("using MLP layer as FFN")
             ffn_layer = Mlp
         elif ffn_layer == "swiglufused" or ffn_layer == "swiglu":
-            logger.info("using SwiGLU layer as FFN")
+            if verbose:
+                logger.info("using SwiGLU layer as FFN")
             ffn_layer = SwiGLUFFNFused
         elif ffn_layer == "identity":
-            logger.info("using Identity layer as FFN")
+            if verbose:
+                logger.info("using Identity layer as FFN")
 
             def f(*args, **kwargs):
                 return nn.Identity()

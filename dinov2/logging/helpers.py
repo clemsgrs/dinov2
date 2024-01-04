@@ -20,10 +20,11 @@ logger = logging.getLogger("dinov2")
 
 
 class MetricLogger(object):
-    def __init__(self, delimiter="\t", output_file=None):
+    def __init__(self, delimiter="\t", output_file=None, verbose: bool = True):
         self.meters = defaultdict(SmoothedValue)
         self.delimiter = delimiter
         self.output_file = output_file
+        self.verbose = verbose
 
     def update(self, **kwargs):
         for k, v in kwargs.items():
@@ -87,7 +88,7 @@ class MetricLogger(object):
             unit_scale=1,
             initial=start_iteration,
             total=n_iterations,
-            leave=True,
+            leave=self.verbose,
             file=sys.stdout,
             disable=not (gpu_id in [-1, 0]),
         )
@@ -104,7 +105,8 @@ class MetricLogger(object):
                 break
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        logger.info("{} Total time: {} ({:.6f} s / it)".format(header, total_time_str, total_time / n_iterations))
+        if self.verbose:
+            logger.info("{} Total time: {} ({:.6f} s / it)".format(header, total_time_str, total_time / n_iterations))
 
 
 class SmoothedValue:
