@@ -4,13 +4,13 @@ ibot:
   separate_head: true
 train:
   batch_size_per_gpu: 128
-  dataset_path: Pathology:root=/root/data:fold=0
+  dataset_path: Pathology:root=/root/data:subset=fold_0
   centering: sinkhorn_knopp
   num_workers: 8
 tune:
   tune_every: 1
-  query_dataset_path: KNN:root=/root/data:split=QUERY:fold=0
-  test_dataset_path: KNN:root=/root/data:split=TEST:fold=0
+  query_dataset_path: KNN:root=/root/data:split=query:subset=fold_0
+  test_dataset_path: KNN:root=/root/data:split=test:subset=fold_0
   early_stopping:
     enable: false
   knn:

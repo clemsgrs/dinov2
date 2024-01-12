@@ -1,6 +1,5 @@
 import numpy as np
 
-from enum import Enum
 from mmap import ACCESS_READ, mmap
 from pathlib import Path
 from typing import Any, Callable, Optional, Tuple
@@ -9,12 +8,9 @@ from torchvision.datasets import VisionDataset
 from .decoders import ImageDataDecoder
 
 
-class _Fold(Enum):
-    FOLD_0 = "0"
-    FOLD_1 = "1"
-    FOLD_2 = "2"
-    FOLD_3 = "3"
-    FOLD_4 = "4"
+class _Subset:
+    def __init__(self, value):
+        self.value = value
 
     def entries_name(self):
         return f"pretrain_entries_{self.value}.npy"
@@ -27,30 +23,30 @@ def _make_mmap_tarball(tarball_path: str) -> mmap:
 
 
 class PathologyDataset(VisionDataset):
-    Fold = _Fold
+    Subset = _Subset
 
     def __init__(
         self,
         *,
         root: str,
-        fold: Optional["PathologyDataset.Fold"] = None,
+        subset: Optional["PathologyDataset.Subset"] = None,
         transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
-        self._fold = fold
+        self._subset = subset
         self._get_entries()
         self._filepaths = np.load(Path(root, "pretrain_file_indices.npy"), allow_pickle=True).item()
         self._mmap_tarball = _make_mmap_tarball(Path(root, "pretrain_dataset.tar"))
 
     @property
-    def fold(self) -> "PathologyDataset.Fold":
-        return self._fold
+    def subset(self) -> "PathologyDataset.Subset":
+        return self._subset
 
     @property
     def _entries_name(self) -> str:
-        return self._fold.entries_name() if self._fold else "pretrain_entries.npy"
+        return self._subset.entries_name() if self._subset else "pretrain_entries.npy"
 
     def _get_entries(self) -> np.ndarray:
         self._entries = self._load_entries(self._entries_name)

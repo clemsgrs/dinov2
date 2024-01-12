@@ -15,7 +15,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import tqdm
 from torch import nn
 
 
@@ -44,10 +43,7 @@ def load_weights(model, state_dict):
     # remove `backbone.` prefix induced by multicrop wrapper
     state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
     msg = model.load_state_dict(state_dict, strict=False)
-    if len(msg.missing_keys) > 0:
-        tqdm.tqdm.write(str(msg))
-    else:
-        tqdm.tqdm.write("All keys matched successfully")
+    return msg
 
 
 def fix_random_seeds(seed=31):

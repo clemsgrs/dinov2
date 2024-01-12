@@ -20,34 +20,49 @@ conda activate dinov2-extras
 
 ## Data preparation
 
-You need to wrap up your data in a tarball file:
+You need to organize each cohort in a tarball file.<br>
+For a given cohort with name `{cohort_name}`:
 
-1. Ensure images are all in one directory
-2. Create a single large tarball file that contains all images and name it `pretrain_dataset.tar` :
+1. ensure images are all in one directory
+2. create a single large tarball file that contains all images
 
     ```shell
-    tar -chf pretrain_dataset.tar /path/to/image/folder
+    tar -cvf {cohort_name}.tar /path/to/image/folder
     ```
 
 ### Using whole dataset
 
-  1. Infer the auxiliary files `pretrain_entries.npy` and `pretrain_file_indices.npy` :
+
+You need to have one `.tar` file for each cohort you intend to train on.<br>
+Let's assume each is named `{cohort_name}.tar`. Then, for each cohort:
+
+  1. Infer the auxiliary files `{cohort_name}_entries.npy` and `{cohort_name}_file_indices.npy` :
 
       ```shell
-      python scripts/infer_entries.py \
-          --tarball_path /path/to/pretrain_dataset.tar \
+      python3 scripts/infer_entries.py \
+          --tarball_path /path/to/{cohort_name}.tar \
           --output_root /path/to/output/folder \
-          --name pretrain
+          --name {cohort_name}
       ```
 
-      The `pretrain_entries.npy` file will record:
+      The `{cohort_name}_entries.npy` file will record:
       - a dummy class index (we set it to 0 for all images since we’re not using classes)
       - a unique filename index for each image
       - the start and end offsets of each image within the tarball file
 
-      The `pretrain_file_indices.npy` file consists in a dictionnary mapping filename index to corresponding filename.
+      The `{cohort_name}_file_indices.npy` file consists in a dictionnary mapping filename index to corresponding filename.
 
-  2. Dump `pretrain_dataset.tar`, `pretrain_entries.npy` and `pretrain_file_indices.npy` in a common folder (e.g. `/root/data`)
+  2. Dump `{cohort_name}.tar`, `{cohort_name}_entries.npy` and `{cohort_name}_file_indices.npy` in a common folder (e.g. `/root/data`)
+
+  Once you have completed the previous steps for each cohort :
+
+  3. Concatenate cohort entries in a single `pretrain_entries.npy` file :
+
+      ```shell
+      python scripts/concat_entries.py \
+      --root /path/to/common/folder \
+      --output_root /path/to/output/folder
+      ```
 
 ### Restricting to a subset
 
@@ -57,26 +72,36 @@ Then, follow these simple steps:
 
   1. Dump the image filenames (e.g. `patch1.jpg`) of the subset of interest in a `.txt` file (e.g. `{subset}.txt`)
 
-  2. Infer the corresponding auxiliary files `pretrain_entries_{subset}.npy`
+  2. Infer the corresponding auxiliary files `{cohort_name}_entries_{subset}.npy`
 
       ```shell
       python scripts/infer_entries.py \
-        --tarball_path /path/to/pretrain_dataset.tar \
+        --tarball_path /path/to/{cohort_name}.tar \
         --output_root /path/to/output/folder \
         --restrict /path/to/{subset}.txt \
-        --name pretrain \
+        --name {cohort_name} \
         --suffix {subset}
       ```
 
-      The `pretrain_entries_{subset}.npy` file will record:
+      The `{cohort_name}_entries_{subset}.npy` file will record:
       - a dummy class index (we set it to 0 for all images since we’re not using classes)
       - a unique filename index for each image listed in `{subset}.txt`
       - the start and end offsets of each image within the tarball file
 
-      A generic `pretrain_file_indices.npy` file will be saved the first time you run this command.<br>
+      A generic `{cohort_name}_file_indices.npy` file will be saved the first time you run this command.<br>
       It consists in a dictionnary mapping filename index to corresponding filename for the entire tarball file.
 
-  3. Dump `pretrain_dataset.tar`, `pretrain_entries_{subset}.npy` and `pretrain_file_indices.npy` in a common folder (e.g. `/root/data`)
+  3. Dump `{cohort_name}.tar`, `{cohort_name}_entries_{subset}.npy` and `{cohort_name}_file_indices.npy` in a common folder (e.g. `/root/data`)
+
+  Once you have completed the previous steps for each cohort :
+
+  4. Concatenate cohort entries in a single `pretrain_entries.npy` file :
+
+      ```shell
+      python scripts/concat_entries.py \
+      --root /path/to/common/folder \
+      --output_root /path/to/output/folder
+      ```
 
 ## Training
 
@@ -93,9 +118,7 @@ Update `dinov2/configs/train/vitl14.yaml` if you want to change some parameters,
 ```shell
 python dinov2/train/train.py \
     --config-file dinov2/configs/train/vitl14.yaml \
-    train.dataset_path=Pathology:root={path/to/data/root}:subset={subset}
+    train.dataset_path=PathologyFoundation:root={path/to/data/root}
 ```
 
-Replace `{path/to/data/root}` with the folder you chose for `--output_root` in data preparation (e.g. `PathologyFoundation:root=/root/data`).<br>
-Leave out `:subset={subset}` if you didn't restrict the dataset to a specific subset when preparing data.<br>
-Otherwise, replace `{subset}` with the suffix you chose for `--suffix` in data preparation (e.g. `PathologyFoundation:root=/root/data:subset=train`).
+Replace `{path/to/data/root}` with the folder you chose for `--output_root` in data preparation (e.g. `PathologyFoundation:root=/root/data`).

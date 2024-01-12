@@ -9,7 +9,6 @@ from typing import Optional
 def concat_entries(
     entries_paths,
     output_root,
-    prefix: Optional[str] = None,
     suffix: Optional[str] = None,
 ):
     try:
@@ -17,7 +16,7 @@ def concat_entries(
         concat_entries = np.load(entries_paths[0])
         cohort_index_column = np.full((concat_entries.shape[0], 1), 0)
         concat_entries = np.hstack([concat_entries, cohort_index_column])
-        cohort_name = entries_paths[0].stem.split("_")[0]
+        cohort_name = entries_paths[0].stem.split("_entries")[0]
         cohort_indices[0] = cohort_name
 
         # load and concatenate the rest of the files
@@ -33,7 +32,7 @@ def concat_entries(
                 data = np.load(e)
                 cohort_index_column = np.full((data.shape[0], 1), i + 1)
                 data = np.hstack([data, cohort_index_column])
-                cohort_name = e.stem.split("_")[0]
+                cohort_name = e.stem.split("_entries")[0]
                 cohort_indices[i + 1] = cohort_name
                 concat_entries = np.concatenate((concat_entries, data))
 
@@ -42,15 +41,10 @@ def concat_entries(
         np.save(cohort_indices_filepath, cohort_indices)
 
         # save concatenated entries
-        if prefix:
-            if suffix:
-                entries_filepath = Path(output_root, f"{prefix}_entries_{suffix}.npy")
-            else:
-                entries_filepath = Path(output_root, f"{prefix}_entries.npy")
-        elif suffix:
-            entries_filepath = Path(output_root, f"entries_{suffix}.npy")
+        if suffix:
+            entries_filepath = Path(output_root, f"pretrain_entries_{suffix}.npy")
         else:
-            entries_filepath = Path(output_root, "entries.npy")
+            entries_filepath = Path(output_root, "pretrain_entries.npy")
         np.save(entries_filepath, np.array(concat_entries, dtype=np.uint64))
         print(f"Concatenated entries saved to: {entries_filepath}")
 
@@ -70,12 +64,11 @@ def main():
         required=True,
         help="Path to the output directory where the concatenated entry will be saved.",
     )
-    parser.add_argument("-p", "--prefix", type=str, help="Prefix to append to the concatenated file name.")
-    parser.add_argument("-s", "--suffix", type=str, help="Suffix to append to the concatenated file name.")
+    parser.add_argument(
+        "-s", "--suffix", type=str, help="Suffix to append at the end of the concatenated entries file name."
+    )
 
     args = parser.parse_args()
-
-    prefix = f"{args.prefix}" if args.prefix else None
     suffix = f"{args.suffix}" if args.suffix else None
 
     # grab all entries
@@ -83,7 +76,7 @@ def main():
     assert len(entries_paths) > 0, f"0 entry file found under {args.root}"
     print(f"{len(entries_paths)} entry files found!")
 
-    concat_entries(entries_paths, args.output_root, prefix, suffix)
+    concat_entries(entries_paths, args.output_root, suffix)
 
 
 if __name__ == "__main__":

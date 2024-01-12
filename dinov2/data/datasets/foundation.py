@@ -1,4 +1,3 @@
-from enum import Enum
 from functools import lru_cache
 
 # from gzip import GzipFile
@@ -15,12 +14,9 @@ from .decoders import ImageDataDecoder, TargetDecoder
 _DEFAULT_MMAP_CACHE_SIZE = 16  # Warning: This can exhaust file descriptors
 
 
-class _Fold(Enum):
-    FOLD_0 = "0"
-    FOLD_1 = "1"
-    FOLD_2 = "2"
-    FOLD_3 = "3"
-    FOLD_4 = "4"
+class _Subset:
+    def __init__(self, value):
+        self.value = value
 
     def entries_name(self):
         return f"pretrain_entries_{self.value}.npy"
@@ -42,20 +38,20 @@ def _make_mmap_tarball(tarballs_root: str, mmap_cache_size: int):
 
 
 class PathologyFoundationDataset(VisionDataset):
-    Fold = _Fold
+    Subset = _Subset
 
     def __init__(
         self,
         *,
         root: str,
-        fold: Optional["PathologyFoundationDataset.Fold"] = None,
+        subset: Optional["PathologyFoundationDataset.Subset"] = None,
         transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         mmap_cache_size: int = _DEFAULT_MMAP_CACHE_SIZE,
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
-        self._fold = fold
+        self._subset = subset
         self._get_entries()
         self._get_cohort_names()
         self._mmap_tarball = _make_mmap_tarball(self._tarballs_root, mmap_cache_size)
@@ -65,12 +61,12 @@ class PathologyFoundationDataset(VisionDataset):
         return self.root
 
     @property
-    def fold(self) -> "PathologyFoundationDataset.Fold":
-        return self._fold
+    def subset(self) -> "PathologyFoundationDataset.Subset":
+        return self._subset
 
     @property
     def _entries_name(self) -> str:
-        return self._fold.entries_name() if self._fold else "pretrain_entries.npy"
+        return self._subset.entries_name() if self._subset else "pretrain_entries.npy"
 
     def _get_entries(self) -> np.ndarray:
         self._entries = self._load_entries(self._entries_name)
@@ -113,17 +109,17 @@ class PathologyFoundationDataset(VisionDataset):
         return data, Path(filepath)
 
     def get_target(self, index: int) -> Any:
-        return int(self._entries[index]["class_index"])
+        return int(self._entries[index][0])
 
     def get_targets(self) -> np.ndarray:
-        return self._entries["class_index"]
+        return self._entries[:, 0]
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         try:
-            image_data = self.get_image_data(index)
+            image_data, _ = self.get_image_data(index)
             image = ImageDataDecoder(image_data).decode()
         except Exception as e:
-            raise RuntimeError(f"can not read image for sample {index}") from e
+            raise RuntimeError(f"can not read image for sample {index} ({e})") from e
         target = self.get_target(index)
         target = TargetDecoder(target).decode()
 

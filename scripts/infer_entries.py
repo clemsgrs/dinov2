@@ -28,7 +28,7 @@ def infer_entries_from_tarball(
     tarball_path,
     output_root,
     restrict_filenames: Optional[List[str]] = None,
-    prefix: Optional[str] = None,
+    name: Optional[str] = None,
     suffix: Optional[str] = None,
     df: Optional[pd.DataFrame] = None,
     file_name: str = "filename",
@@ -91,11 +91,11 @@ def infer_entries_from_tarball(
             progress_bar.update(512 + size + (512 - (size % 512) if size % 512 != 0 else 512 + size))
 
     # save entries
-    if prefix:
+    if name:
         if suffix:
-            entries_filepath = Path(output_root, f"{prefix}_entries_{suffix}.npy")
+            entries_filepath = Path(output_root, f"{name}_entries_{suffix}.npy")
         else:
-            entries_filepath = Path(output_root, f"{prefix}_entries.npy")
+            entries_filepath = Path(output_root, f"{name}_entries.npy")
     elif suffix:
         entries_filepath = Path(output_root, f"entries_{suffix}.npy")
     else:
@@ -104,7 +104,7 @@ def infer_entries_from_tarball(
 
     # optionally save file indices
     file_indices_filepath = (
-        Path(output_root, f"{prefix}_file_indices.npy") if prefix else Path(output_root, "file_indices.npy")
+        Path(output_root, f"{name}_file_indices.npy") if name else Path(output_root, "file_indices.npy")
     )
     if not file_indices_filepath.exists():
         np.save(file_indices_filepath, file_indices)
@@ -132,7 +132,7 @@ def main():
         required=True,
         help="Path to the output directory where dataset.tar and entries.npy will be saved.",
     )
-    parser.add_argument("--prefix", type=str, help="Prefix to append to the *.npy file names.")
+    parser.add_argument("--name", type=str, help="Name to put in front of the *.npy file names.")
     parser.add_argument(
         "--restrict",
         type=str,
@@ -172,7 +172,7 @@ def main():
             restrict_filenames = [line.strip() for line in f]
         print(f"Done: {len(set(restrict_filenames))} unique files found")
 
-    prefix = f"{args.prefix}" if args.prefix else None
+    name = f"{args.name}" if args.name else None
     suffix = f"{args.suffix}" if args.suffix else None
 
     df = pd.read_csv(args.csv) if args.csv else None
@@ -180,7 +180,7 @@ def main():
         args.tarball_path,
         args.output_root,
         restrict_filenames,
-        prefix,
+        name,
         suffix,
         df,
         args.file_name,

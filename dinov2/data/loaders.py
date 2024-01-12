@@ -10,7 +10,7 @@ from typing import Any, Callable, List, Optional, TypeVar
 import torch
 from torch.utils.data import Sampler
 
-from .datasets import ImageNet, ImageNet22k, PathologyDataset, KNNDataset, PathologyFoundationDataset
+from .datasets import ImageNet, ImageNet22k, PathologyDataset, PathologyFoundationDataset, KNNDataset
 from .samplers import EpochSampler, InfiniteSampler, ShardedInfiniteSampler
 
 
@@ -49,7 +49,7 @@ def _parse_dataset_str(dataset_str: str):
 
     for token in tokens[1:]:
         key, value = token.split("=")
-        assert key in ("root", "extra", "split", "fold")
+        assert key in ("root", "extra", "split", "subset")
         kwargs[key] = value
 
     if name == "ImageNet":
@@ -60,21 +60,21 @@ def _parse_dataset_str(dataset_str: str):
         class_ = ImageNet22k
     elif name == "Pathology":
         class_ = PathologyDataset
-        if "fold" in kwargs:
-            fold = kwargs["fold"]
-            kwargs["fold"] = PathologyDataset.Fold[f"FOLD_{fold}"]
+        if "subset" in kwargs:
+            subset = kwargs["subset"]
+            kwargs["subset"] = PathologyDataset.Subset(subset)
     elif name == "PathologyFoundation":
         class_ = PathologyFoundationDataset
-        if "fold" in kwargs:
-            fold = kwargs["fold"]
-            kwargs["fold"] = PathologyFoundationDataset.Fold[f"FOLD_{fold}"]
+        if "subset" in kwargs:
+            subset = kwargs["subset"]
+            kwargs["subset"] = PathologyFoundationDataset.Subset(subset)
     elif name == "KNN":
         class_ = KNNDataset
         if "split" in kwargs:
             kwargs["split"] = KNNDataset.Split[kwargs["split"]]
-        if "fold" in kwargs:
-            fold = kwargs["fold"]
-            kwargs["fold"] = KNNDataset.Fold[f"FOLD_{fold}"]
+        if "subset" in kwargs:
+            subset = kwargs["subset"]
+            kwargs["subset"] = KNNDataset.Subset(subset)
     else:
         raise ValueError(f'Unsupported dataset "{name}"')
 

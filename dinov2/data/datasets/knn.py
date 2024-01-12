@@ -12,20 +12,17 @@ from .extended import ExtendedVisionDataset
 _Labels = int
 
 
-class _Fold(Enum):
-    FOLD_0 = "0"
-    FOLD_1 = "1"
-    FOLD_2 = "2"
-    FOLD_3 = "3"
-    FOLD_4 = "4"
+class _Subset:
+    def __init__(self, value):
+        self.value = value
 
     def entries_name(self, split):
         return f"{split.value}_entries_{self.value}.npy"
 
 
 class _Split(Enum):
-    QUERY = "query"
-    TEST = "test"
+    query = "query"
+    test = "test"
 
     def entries_name(self):
         return f"{self.value}_entries.npy"
@@ -41,7 +38,7 @@ def _make_mmap_tarball(tarball_path: str) -> mmap:
 
 
 class KNNDataset(ExtendedVisionDataset):
-    Fold = _Fold
+    Subset = _Subset
     Split = _Split
     Labels = _Labels
 
@@ -49,14 +46,14 @@ class KNNDataset(ExtendedVisionDataset):
         self,
         *,
         root: str,
-        fold: Optional["KNNDataset.Fold"] = None,
+        subset: Optional["KNNDataset.Subset"] = None,
         split: Optional["KNNDataset.Split"] = None,
         transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
-        self._fold = fold
+        self._subset = subset
         self._split = split
         self._get_entries()
         self._get_filepaths()
@@ -64,8 +61,8 @@ class KNNDataset(ExtendedVisionDataset):
         self._get_class_ids()
 
     @property
-    def fold(self) -> "KNNDataset.Fold":
-        return self._fold
+    def subset(self) -> "KNNDataset.Subset":
+        return self._subset
 
     @property
     def split(self) -> "KNNDataset.Split":
@@ -73,7 +70,7 @@ class KNNDataset(ExtendedVisionDataset):
 
     @property
     def _entries_name(self) -> str:
-        return self._fold.entries_name(self._split)
+        return self._subset.entries_name(self._split)
 
     @property
     def _file_indices_name(self) -> str:

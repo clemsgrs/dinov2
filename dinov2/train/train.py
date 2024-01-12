@@ -161,6 +161,7 @@ def do_tune(
     test_dataset,
     output_dir,
     gpu_id,
+    verbose: bool = True,
 ):
     # in DINOv2, they have on SSLMetaArch class
     # first creates student and teacher backbone based on config
@@ -176,13 +177,31 @@ def do_tune(
     # which should be of dimension embed_dim
 
     student, teacher, _ = build_model_from_cfg(cfg)
-    student.cuda()
-    teacher.cuda()
-    tqdm.tqdm.write(f"Loading epoch {epoch} weights...")
+
+    # from dinov2.models.vision_transformer import BlockChunk
+    # from dinov2.fsdp import get_fsdp_wrapper
+
+    # student_model_cfg = cfg.compute_precision.student["backbone"]
+    # student = get_fsdp_wrapper(student_model_cfg, modules_to_wrap={BlockChunk})(student)
+    # teacher_model_cfg = cfg.compute_precision.teacher["backbone"]
+    # teacher = get_fsdp_wrapper(teacher_model_cfg, modules_to_wrap={BlockChunk})(teacher)
+
+    student = student.to(torch.device("cuda"))
+    teacher = teacher.to(torch.device("cuda"))
+    # student = student.to(torch.device(f"cuda:{gpu_id}"))
+    # teacher = teacher.to(torch.device(f"cuda:{gpu_id}"))
+    if verbose:
+        tqdm.tqdm.write(f"Loading epoch {epoch} weights...")
     student_weights = model.student.state_dict()
     teacher_weights = model.teacher.state_dict()
-    load_weights(student, student_weights)
-    load_weights(teacher, teacher_weights)
+    student_msg = load_weights(student, student_weights)
+    teacher_msg = load_weights(teacher, teacher_weights)
+
+    if len(student_msg.missing_keys) > 0:
+        tqdm.tqdm.write(str(student_msg))
+    if len(teacher_msg.missing_keys) > 0:
+        tqdm.tqdm.write(str(teacher_msg))
+
     student.eval()
     teacher.eval()
 
@@ -200,10 +219,12 @@ def do_tune(
         gpu_id=gpu_id,
         gather_on_cpu=cfg.tune.knn.gather_on_cpu,
         batch_size=cfg.tune.knn.batch_size,
-        num_workers=4,
+        num_workers=0,
+        persistent_workers=False,
         n_per_class_list=cfg.tune.knn.n_per_class_list,
         n_tries=cfg.tune.knn.n_tries,
         model_name="student",
+        verbose=verbose,
     )
 
     teacher_results = eval_knn_with_model(
@@ -218,10 +239,12 @@ def do_tune(
         gpu_id=gpu_id,
         gather_on_cpu=cfg.tune.knn.gather_on_cpu,
         batch_size=cfg.tune.knn.batch_size,
-        num_workers=4,
+        num_workers=0,
+        persistent_workers=False,
         n_per_class_list=cfg.tune.knn.n_per_class_list,
         n_tries=cfg.tune.knn.n_tries,
         model_name="teacher",
+        verbose=verbose,
     )
 
     #######
@@ -453,6 +476,7 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
                     test_dataset,
                     results_save_dir,
                     gpu_id,
+                    verbose=False,
                 )
 
                 if distributed.is_main_process() and cfg.wandb.enable:
