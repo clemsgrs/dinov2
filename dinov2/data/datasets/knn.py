@@ -70,7 +70,10 @@ class KNNDataset(ExtendedVisionDataset):
 
     @property
     def _entries_name(self) -> str:
-        return self._subset.entries_name(self._split)
+        if self._subset:
+            return self._subset.entries_name(self._split)
+        else:
+            return self._split.entries_name()
 
     @property
     def _file_indices_name(self) -> str:
