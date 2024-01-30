@@ -27,7 +27,8 @@ def parse_tar_header(header_bytes):
 def infer_entries_from_tarball(
     tarball_path,
     output_root,
-    restrict_filenames: Optional[List[str]] = None,
+    keep_filenames: Optional[List[str]] = None,
+    remove_filenames: Optional[List[str]] = None,
     name: Optional[str] = None,
     suffix: Optional[str] = None,
     df: Optional[pd.DataFrame] = None,
@@ -46,8 +47,11 @@ def infer_entries_from_tarball(
         if class_name not in df.columns:
             df[class_name] = df[label_name].apply(lambda x: f"class_{x}")
 
-    # convert restrict filepaths to a set for efficient lookup, if provided
-    restrict_filenames = set(restrict_filenames) if restrict_filenames else None
+    # convert keep filenames to a set for efficient lookup, if provided
+    keep_filenames = set(keep_filenames) if keep_filenames else None
+
+    # convert remove filenames to a set for efficient lookup, if provided
+    remove_filenames = set(remove_filenames) if remove_filenames else None
 
     open_callable = get_open_callable_from_tarball(tarball_path)
     with open_callable(tarball_path, "rb") as f:
@@ -71,12 +75,19 @@ def infer_entries_from_tarball(
                 progress_bar.update(512)
                 continue
 
+            if Path(path).suffix == "":
+                # skip directory
+                file_index += 1
+                progress_bar.update(512)
+                continue
+
             # add file name to the dictionary and use the index in entries
             file_indices[file_index] = filename
 
             class_index = 0
-            # if restrict_filenames is None or stem in restrict_filenames:
-            if restrict_filenames is None or len(restrict_filenames.intersection(set([filename]))) > 0:
+            keep_file = keep_filenames is None or len(keep_filenames.intersection(set([filename]))) > 0
+            remove_file = remove_filenames is not None and len(remove_filenames.intersection(set([filename]))) > 0
+            if keep_file and not remove_file:
                 if df is not None:
                     class_index = df[df[file_name] == filename][label_name].values[0]
                 start_offset = f.tell()
@@ -134,9 +145,14 @@ def main():
     )
     parser.add_argument("--name", type=str, help="Name to put in front of the *.npy file names.")
     parser.add_argument(
-        "--restrict",
+        "--keep",
         type=str,
-        help="Path to a .txt/.csv file with the filenames for a specific fold.",
+        help="Path to a .csv file with the filenames of the patches you want to keep.",
+    )
+    parser.add_argument(
+        "--remove",
+        type=str,
+        help="Path to a .csv file with the filenames of the patches you want to remove.",
     )
     parser.add_argument(
         "--suffix",
@@ -164,13 +180,23 @@ def main():
     )
 
     args = parser.parse_args()
+    assert not (
+        isinstance(args.keep, str) and isinstance(args.remove, str)
+    ), "Both 'keep' and 'remove' flags were specified, but they are mutually exclusive.\nPlease provide one or the other."
 
-    restrict_filenames = None
-    if args.restrict:
-        print(f"Parsing {args.restrict}...")
-        with open(args.restrict, "r") as f:
-            restrict_filenames = [line.strip() for line in f]
-        print(f"Done: {len(set(restrict_filenames))} unique files found")
+    keep_filenames = None
+    if args.keep:
+        print(f"Parsing {args.keep}...")
+        with open(args.keep, "r") as f:
+            keep_filenames = [line.strip() for line in f]
+        print(f"Done: {len(set(keep_filenames))} unique files found")
+
+    remove_filenames = None
+    if args.remove:
+        print(f"Parsing {args.remove}...")
+        with open(args.remove, "r") as f:
+            remove_filenames = [line.strip() for line in f]
+        print(f"Done: {len(set(remove_filenames))} unique files found")
 
     name = f"{args.name}" if args.name else None
     suffix = f"{args.suffix}" if args.suffix else None
@@ -179,7 +205,8 @@ def main():
     infer_entries_from_tarball(
         args.tarball_path,
         args.output_root,
-        restrict_filenames,
+        keep_filenames,
+        remove_filenames,
         name,
         suffix,
         df,
