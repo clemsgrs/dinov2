@@ -17,9 +17,10 @@ tune:
     batch_size: 64
 student:
   arch: vit_small
-  patch_size: 16
+  patch_size: 14
   num_register_tokens: 0
   pretrained_weights:
+  # pretrained_weights: 'checkpoints/dinov2_vits14_pretrain.pth'
   drop_path_rate: 0.4
   ffn_layer: swiglufused
   block_chunks: 4

@@ -1,27 +1,11 @@
-import os
-import gzip
 import tqdm
+import tarfile
 import argparse
 import numpy as np
 import pandas as pd
 
 from pathlib import Path
 from typing import Optional, List
-
-
-def get_open_callable_from_tarball(tarball_path):
-    suffix = "".join(Path(tarball_path).suffixes)
-    if suffix == ".tar":
-        return open
-    elif suffix == ".tar.gz":
-        return gzip.open
-
-
-def parse_tar_header(header_bytes):
-    # Parse the header of a tar file
-    name = header_bytes[0:100].decode("utf-8").rstrip("\0")
-    size = int(header_bytes[124:136].decode("utf-8").strip("\0"), 8)
-    return name, size
 
 
 def infer_entries_from_tarball(
@@ -40,9 +24,6 @@ def infer_entries_from_tarball(
     file_index = 0
     file_indices = {}  # store filenames with an index
 
-    total_size = os.path.getsize(tarball_path)
-    progress_bar = tqdm.tqdm(total=total_size, desc="Reading Tarball")
-
     if df is not None:
         if class_name not in df.columns:
             df[class_name] = df[label_name].apply(lambda x: f"class_{x}")
@@ -53,53 +34,33 @@ def infer_entries_from_tarball(
     # convert remove filenames to a set for efficient lookup, if provided
     remove_filenames = set(remove_filenames) if remove_filenames else None
 
-    open_callable = get_open_callable_from_tarball(tarball_path)
-    with open_callable(tarball_path, "rb") as f:
-        while True:
-            header_bytes = f.read(512)  # read header
-            if not header_bytes.strip(b"\0"):
-                break  # end of archive
+    with tarfile.open(tarball_path, "r:*") as tar:
+        with tqdm.tqdm(
+            tar.getmembers(),
+            desc=f"Parsing {Path(tarball_path).name}",
+            leave=True,
+        ) as t:
+            for member in t:
+                if member.isfile():  # Process only files (not directories, symlinks, etc.)
+                    filename = Path(member.name).name
+                    start_offset = member.offset_data
+                    end_offset = member.offset_data + member.size
 
-            path, size = parse_tar_header(header_bytes)
-            filename = Path(path).name
+                    # add file name to the dictionary and use the index in entries
+                    file_indices[file_index] = filename
 
-            if filename == "@LongLink":
-                path = f.read(512).decode("utf-8").rstrip("\0")
-                header_bytes = f.read(512)  # read the next header
-                path, size = parse_tar_header(header_bytes)
-                filename = Path(path).name
+                    class_index = 0
+                    keep_file = keep_filenames is None or len(keep_filenames.intersection(set([filename]))) > 0
+                    remove_file = (
+                        remove_filenames is not None and len(remove_filenames.intersection(set([filename]))) > 0
+                    )
+                    if keep_file and not remove_file:
+                        if df is not None:
+                            class_index = df[df[file_name] == filename][label_name].values[0]
 
-            if size == 0 and file_index == 0:
-                # skip first entry if empty
-                file_index += 1
-                progress_bar.update(512)
-                continue
+                        entries.append([class_index, file_index, start_offset, end_offset])
 
-            if Path(path).suffix == "":
-                # skip directory
-                file_index += 1
-                progress_bar.update(512)
-                continue
-
-            # add file name to the dictionary and use the index in entries
-            file_indices[file_index] = filename
-
-            class_index = 0
-            keep_file = keep_filenames is None or len(keep_filenames.intersection(set([filename]))) > 0
-            remove_file = remove_filenames is not None and len(remove_filenames.intersection(set([filename]))) > 0
-            if keep_file and not remove_file:
-                if df is not None:
-                    class_index = df[df[file_name] == filename][label_name].values[0]
-                start_offset = f.tell()
-                end_offset = start_offset + size
-                entries.append([class_index, file_index, start_offset, end_offset])
-
-            file_index += 1
-
-            f.seek(size, os.SEEK_CUR)  # skip to the next header
-            if size % 512 != 0:
-                f.seek(512 - (size % 512), os.SEEK_CUR)  # adjust for padding
-            progress_bar.update(512 + size + (512 - (size % 512) if size % 512 != 0 else 512 + size))
+                    file_index += 1
 
     # save entries
     if name:

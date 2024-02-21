@@ -1,7 +1,5 @@
 from functools import lru_cache
 
-# from gzip import GzipFile
-# from io import BytesIO
 from mmap import ACCESS_READ, mmap
 from typing import Any, Callable, Optional, Tuple
 from torchvision.datasets import VisionDataset
@@ -93,18 +91,11 @@ class PathologyFoundationDataset(VisionDataset):
         entry = self._entries[index]
         file_idx, start_offset, end_offset, cohort_idx = entry[1], entry[2], entry[3], entry[4]
         cohort_name = self._cohort_names[cohort_idx]
-        filepaths_dict = self._get_filepaths_dict(cohort_name)
-        filepath = filepaths_dict[file_idx]
+        # disabling file path fetching to gain some speed
+        # filepaths_dict = self._get_filepaths_dict(cohort_name)
+        # filepath = filepaths_dict[file_idx]
+        filepath = f"{file_idx}"
         class_mmap = self._mmap_tarball(cohort_name)
-        # try:
-        #     mapped_data = class_mmap[start_offset:end_offset]
-        #     data = mapped_data[512:]  # Skip entry header block
-        #     with GzipFile(fileobj=BytesIO(data)) as g:
-        #         data = g.read()
-        # except Exception as e:
-        #     raise RuntimeError(
-        #         f"can not retrieve image data for sample {index} " f'from "{cohort_name}" tarball'
-        #     ) from e
         data = class_mmap[start_offset:end_offset]
         return data, Path(filepath)
 

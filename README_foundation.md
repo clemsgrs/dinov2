@@ -78,7 +78,7 @@ Then, follow these simple steps:
       python scripts/infer_entries.py \
         --tarball_path /path/to/{cohort_name}.tar \
         --output_root /path/to/output/folder \
-        --restrict /path/to/{subset}.txt \
+        --keep /path/to/{subset}.txt \
         --name {cohort_name} \
         --suffix {subset}
       ```
@@ -116,7 +116,7 @@ export PYTHONPATH="${PYTHONPATH}:/path/to/your/dinov2"
 Update `dinov2/configs/train/vitl14.yaml` if you want to change some parameters, then run:
 
 ```shell
-python dinov2/train/train.py \
+python -m torch.distributed.run --nproc_per_node=gpu dinov2/train/train.py \
     --config-file dinov2/configs/train/vitl14.yaml \
     train.dataset_path=PathologyFoundation:root={path/to/data/root}
 ```

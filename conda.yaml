@@ -12,6 +12,7 @@ dependencies:
   - pytorch::torchvision=0.15.0
   - omegaconf
   - tqdm
+  - natsort
   - wandb
   - torchmetrics=0.10.3
   - fvcore
