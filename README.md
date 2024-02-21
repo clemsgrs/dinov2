@@ -96,6 +96,6 @@ python -m torch.distributed.run --nproc_per_node=gpu dinov2/train/train.py \
     train.dataset_path=Pathology:root={path/to/data/root}:subset={subset}
 ```
 
-Replace `{path/to/data/root}` with the folder you chose for `--output_root` in data preparation (e.g. `PathologyFoundation:root=/root/data`).<br>
+Replace `{path/to/data/root}` with the folder you chose for `--output_root` in data preparation (e.g. `Pathology:root=/root/data`).<br>
 Leave out `:subset={subset}` if you didn't restrict the dataset to a specific subset when preparing data.<br>
-Otherwise, replace `{subset}` with the suffix you chose for `--suffix` in data preparation (e.g. `PathologyFoundation:root=/root/data:subset=train`).
+Otherwise, replace `{subset}` with the suffix you chose for `--suffix` in data preparation (e.g. `Pathology:root=/root/data:subset=train`).
