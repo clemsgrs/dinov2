@@ -37,7 +37,7 @@ class PathologyDataset(VisionDataset):
         super().__init__(root, transforms, transform, target_transform)
         self._subset = subset
         self._get_entries()
-        self._filepaths = np.load(Path(root, "pretrain_file_indices.npy"), allow_pickle=True).item()
+        # self._filepaths = np.load(Path(root, "pretrain_file_indices.npy"), allow_pickle=True).item()
         self._mmap_tarball = _make_mmap_tarball(Path(root, "pretrain_dataset.tar"))
 
     @property
@@ -58,7 +58,8 @@ class PathologyDataset(VisionDataset):
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
         file_idx, start_offset, end_offset = entry[1], entry[2], entry[3]
-        filepath = self._filepaths[file_idx]
+        # filepath = self._filepaths[file_idx]
+        filepath = f"{file_idx}"
         mapped_data = self._mmap_tarball[start_offset:end_offset]
         return mapped_data, Path(filepath)
 
