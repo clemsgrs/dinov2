@@ -121,6 +121,7 @@ def main(args):
         data_loader,
         desc="Feature Extraction",
         unit=" img",
+        unit_scale=cfg.inference.batch_size,
         ncols=80,
         position=0,
         leave=True,
