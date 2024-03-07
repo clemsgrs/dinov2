@@ -8,3 +8,4 @@ from .image_net_22k import ImageNet22k
 from .pathology import PathologyDataset
 from .knn import KNNDataset
 from .foundation import PathologyFoundationDataset
+from .image_folder import ImageFolderWithNameDataset

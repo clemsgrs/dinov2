@@ -23,6 +23,7 @@ class SamplerType(Enum):
     INFINITE = 2
     SHARDED_INFINITE = 3
     SHARDED_INFINITE_NEW = 4
+    RANDOM = 5
 
 
 def _make_bool_str(b: bool) -> str:
@@ -177,6 +178,14 @@ def _make_sampler(
             seed=seed,
             drop_last=False,
         )
+    elif type == SamplerType.RANDOM:
+        if verbose:
+            logger.info("sampler: random")
+        if size > 0:
+            raise ValueError("sampler size > 0 is invalid")
+        if advance > 0:
+            raise ValueError("sampler advance > 0 is invalid")
+        return torch.utils.data.RandomSampler(dataset)
 
     if verbose:
         logger.info("sampler: none")

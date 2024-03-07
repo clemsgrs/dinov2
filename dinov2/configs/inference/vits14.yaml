@@ -1,0 +1,27 @@
+dino:
+  head_bottleneck_dim: 384
+train:
+  centering: sinkhorn_knopp
+inference:
+  data_dir: /root/data
+  batch_size: 64
+  num_workers: 8
+student:
+  arch: vit_small
+  patch_size: 14
+  num_register_tokens: 0
+  pretrained_weights: '/data/pathology/projects/ais-cap/clement/code/dinov2/output/769naczt/eval/training_649999/teacher_checkpoint.pth'
+  drop_path_rate: 0.4
+  ffn_layer: swiglufused
+  block_chunks: 4
+crops:
+  local_crops_size: 98
+wandb:
+  enable: false
+  project: 'vision'
+  username: 'vlfm'
+  exp_name: 'feature_extraction'
+  tags: ['${wandb.exp_name}', 'patch', '${student.arch}']
+  dir: '/home/user'
+  group:
+  resume_id:

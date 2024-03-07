@@ -4,6 +4,10 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import logging
+import torch
+import torch.nn as nn
+
+from pathlib import Path
 
 from . import vision_transformer as vits
 
@@ -56,3 +60,41 @@ def update_state_dict(model_dict, state_dict):
             success += 1
     msg = f"{success} weight(s) loaded succesfully ; {failure} weight(s) not loaded because of mismatching shapes"
     return updated_state_dict, msg
+
+
+class PatchEmbedder(nn.Module):
+    def __init__(
+        self,
+        cfg,
+        verbose: bool = True,
+    ):
+        super(PatchEmbedder, self).__init__()
+        checkpoint_key = "teacher"
+
+        self.vit, _, _ = build_model_from_cfg(cfg)
+
+        if Path(cfg.student.pretrained_weights).is_file():
+            if verbose:
+                print(f"Pretrained weights: loading from {cfg.student.pretrained_weights}")
+            chkpt = torch.load(cfg.student.pretrained_weights)
+            sd = chkpt[checkpoint_key]
+            sd, msg = update_state_dict(self.vit.state_dict(), sd)
+            self.vit.load_state_dict(sd, strict=False)
+            if verbose:
+                print(f"Pretrained weights loaded: {msg}")
+
+        elif verbose:
+            print(f"{cfg.student.pretrained_weights} doesnt exist ; please provide path to existing file")
+
+        if verbose:
+            print("Freezing Vision Transformer")
+        for param in self.vit.parameters():
+            param.requires_grad = False
+        if verbose:
+            print("Done")
+
+    def forward(self, x):
+        # x = [B, 3, img_size, img_size]
+        # TODO: add prepare_img_tensor method
+        feature = self.vit(x).detach().cpu()  # [B, 384]
+        return feature
