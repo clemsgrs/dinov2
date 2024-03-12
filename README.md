@@ -78,6 +78,55 @@ Then, follow these simple steps:
 
   3. Dump `pretrain_dataset.tar`, `pretrain_entries_{subset}.npy` and `pretrain_file_indices.npy` in a common folder (e.g. `/root/data`)
 
+## (optional) Downstream data preparation
+
+*This section describes the steps to follow in case you want to run tuning on a downstream task dataset with patch-level labels.*
+
+1. Create a `.csv` file containing downstream patches' filenames and labels:
+
+    ```
+    filename,label
+    downstream_patch_1.jpg,3
+    downstream_patch_2.jpg,1
+    ...
+    ```
+
+2. Create a single tarball file that contains all downstream tuning patches and name it `downstream_dataset.tar`
+
+    ```shell
+    tar -chf downstream_dataset.tar /path/to/downstream/dataset/image/folder
+    ```
+   
+4. Infer the auxiliary files `query_entries.npy` and `query_file_indices.npy` :
+
+    ```
+    python3 scripts/infer_entries.py \
+      --tarball_path /path/to/downstream_dataset.tar \
+      --output_root /path/to/output/folder \
+      --csv /path/to/csv/file.csv \
+      --keep /path/to/output/query.txt \
+      --prefix query
+    ```
+
+    `/path/to/csv/file.csv` should point to the `.csv` file created in step 1. just above<br>
+    `/path/to/output/query.txt` should contain the list of filnames for the patches in the query subset of the downstream dataset.
+
+5. Infer the auxiliary file `test_entries.npy` and `test_file_indices.npy`:
+
+    ```
+    python3 scripts/infer_entries.py \
+      --tarball_path /path/to/downstream_dataset.tar \
+      --output_root /path/to/output/folder \
+      --csv /path/to/csv/file.csv \
+      --keep /path/to/output/test.txt \
+      --prefix test
+    ```
+
+    `/path/to/csv/file.csv` should point to the `.csv` file created in step 1. just above<br>
+    `/path/to/output/test.txt` should contain the list of filnames for the patches in the test subset of the downstream dataset.
+
+6. dump the `.tar` file and the `.npy` files in a common folder (e.g. `/root/data`)
+
 ## Training
 
 :warning: To execute the commands provided in this section, make sure the `dinov2` package is included in the Python module search path:
@@ -88,7 +137,8 @@ export PYTHONPATH="${PYTHONPATH}:/path/to/your/dinov2"
 
 ### Training a ViT-L/14
 
-Update `dinov2/configs/train/vitl14.yaml` if you want to change some parameters, then run:
+Update `dinov2/configs/train/vitl14.yaml` if you want to change some parameters (e.g. enabling early stopping).<br>
+Then run:
 
 ```shell
 python -m torch.distributed.run --nproc_per_node=gpu dinov2/train/train.py \
@@ -99,3 +149,13 @@ python -m torch.distributed.run --nproc_per_node=gpu dinov2/train/train.py \
 Replace `{path/to/data/root}` with the folder you chose for `--output_root` in data preparation (e.g. `Pathology:root=/root/data`).<br>
 Leave out `:subset={subset}` if you didn't restrict the dataset to a specific subset when preparing data.<br>
 Otherwise, replace `{subset}` with the suffix you chose for `--suffix` in data preparation (e.g. `Pathology:root=/root/data:subset=train`).
+
+In case you want to run downstream tuning, make sure to update the following two parameters in your config:
+
+```shell
+tune:
+  query_dataset_path: KNN:root={path/to/data/root}:split=query
+  test_dataset_path: KNN:root={path/to/data/root}:split=test
+```
+
+Replace `{path/to/data/root}` with the folder where you dumped the downstream `.tar` file and `.npy` files during data preparation.
