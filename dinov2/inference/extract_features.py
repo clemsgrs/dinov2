@@ -139,7 +139,7 @@ def main(args):
                     filenames.append(fname)
                     feature_paths.append(feature_path)
                 if cfg.wandb.enable and not run_distributed:
-                    wandb.log({"processed": i + 1})
+                    wandb.log({"processed": i + imgs.shape[0]})
 
     features_df = pd.DataFrame.from_dict(
         {

@@ -69,6 +69,7 @@ def evaluate(
     header = "Test"
 
     for samples, targets, *_ in metric_logger.log_every(data_loader, 10, device, header):
+        # given model went through ModelWithNormalize, outputs are already normalized
         outputs = model(samples.to(device))
         targets = targets.to(device)
         one_hot_targets = one_hot(targets, num_classes=num_classes)
@@ -139,8 +140,6 @@ def extract_features_with_dataloader(
             labels_shape = list(labels_rank.shape)
             labels_shape[0] = sample_count
             all_labels = torch.full(labels_shape, fill_value=-1, device=gather_device)
-            if verbose:
-                logger.info(f"Storing features into tensor of shape {features.shape}")
 
         # share indexes, features and labels between processes
         index_all = all_gather_and_flatten(index).to(gather_device)
