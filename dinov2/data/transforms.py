@@ -75,17 +75,40 @@ def make_classification_train_transform(
 # This matches (roughly) torchvision's preset for classification evaluation:
 #   https://github.com/pytorch/vision/blob/main/references/classification/presets.py#L47-L69
 def make_classification_eval_transform(
-    *,
+    image_size: int,
     resize_size: int = 256,
     interpolation=transforms.InterpolationMode.BICUBIC,
     crop_size: int = 224,
     mean: Sequence[float] = IMAGENET_DEFAULT_MEAN,
     std: Sequence[float] = IMAGENET_DEFAULT_STD,
 ) -> transforms.Compose:
-    transforms_list = [
-        transforms.Resize(resize_size, interpolation=interpolation),
-        transforms.CenterCrop(crop_size),
-        MaybeToTensor(),
-        make_normalize_transform(mean=mean, std=std),
-    ]
+    if image_size == crop_size:
+        transforms_list = [
+            MaybeToTensor(),
+            make_normalize_transform(mean=mean, std=std),
+        ]
+    elif image_size > crop_size:
+        transforms_list = [
+            transforms.Resize(resize_size, interpolation=interpolation, antialias=True),
+            transforms.CenterCrop(crop_size),
+            MaybeToTensor(),
+            make_normalize_transform(mean=mean, std=std),
+        ]
+    return transforms.Compose(transforms_list)
+
+
+def make_feature_extraction_transform(
+    image_size: int,
+    resize_size: int = 224,
+    interpolation=transforms.InterpolationMode.BICUBIC,
+) -> transforms.Compose:
+    if image_size == resize_size:
+        transforms_list = [
+            MaybeToTensor(),
+        ]
+    elif image_size > resize_size:
+        transforms_list = [
+            transforms.Resize(resize_size, interpolation=interpolation, antialias=True),
+            MaybeToTensor(),
+        ]
     return transforms.Compose(transforms_list)

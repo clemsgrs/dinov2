@@ -1,0 +1,33 @@
+dino:
+  head_bottleneck_dim: 384
+train:
+  centering: sinkhorn_knopp
+  experiment_name: 'feature_extraction'
+inference:
+  root_dir: '/data/pathology/projects/ais-cap/dataset/panda/hs2p/patches/otsu/${inference.region_size}/jpg'
+  slide_list:
+  level: local
+  region_size: 2048
+  patch_size: 256
+  num_workers: 8
+  save_region_features: false
+student:
+  arch: vit_small
+  patch_size: 14
+  num_register_tokens: 0
+  pretrained_weights: '/data/pathology/projects/ais-cap/clement/code/dinov2/output/769naczt/eval/training_649999/teacher_checkpoint.pth'
+  drop_path_rate: 0.4
+  ffn_layer: swiglufused
+  block_chunks: 4
+crops:
+  global_crops_size: 224
+  local_crops_size: 98
+wandb:
+  enable: true
+  project: 'hipt'
+  username: 'clemsg'
+  exp_name: '${train.experiment_name}'
+  tags: ['${wandb.exp_name}', '${inference.level}', '${inference.region_size}', '${student.arch}']
+  dir: '/home/user'
+  group:
+  resume_id:

@@ -9,8 +9,7 @@ from typing import Any, List, Optional, Tuple
 import torch
 import torch.backends.cudnn as cudnn
 
-from dinov2.models import build_model_from_cfg
-import dinov2.utils.utils as dinov2_utils
+from dinov2.models import build_model_from_cfg, load_pretrained_weights
 
 
 def get_args_parser(
@@ -60,7 +59,7 @@ def get_autocast_dtype(config):
 
 def build_model_for_eval(config):
     model, _ = build_model_from_cfg(config, only_teacher=True)
-    dinov2_utils.load_pretrained_weights(model, config.student.pretrained_weights, "teacher")
+    load_pretrained_weights(model, config.student.pretrained_weights, "teacher")
     model.eval()
     model.cuda()
     return model

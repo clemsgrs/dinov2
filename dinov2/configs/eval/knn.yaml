@@ -1,0 +1,25 @@
+data:
+  query_dataset:
+  test_dataset:
+  batch_size: 256
+  image_size: 256
+student:
+  pretrained_weights:
+knn:
+  nb_knn: [10, 20, 100, 200]
+  temperature: 0.07
+  n_tries: 1
+  n_per_class_list: -1
+  output_dir: ./output
+speed:
+  num_workers: 8
+  gather_on_cpu: false
+wandb:
+  enable: false
+  project: 'vision'
+  username: 'vlfm'
+  exp_name: 'knn'
+  tags: ['${wandb.exp_name}', '${student.arch}']
+  dir: '/home/user'
+  group:
+  resume_id:

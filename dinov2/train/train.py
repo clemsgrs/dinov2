@@ -353,7 +353,7 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
     # setup tuning data
 
     if cfg.tune.tune_every:
-        transform = make_classification_eval_transform()
+        transform = make_classification_eval_transform(image_size=cfg.crops.global_crops_size)
         query_dataset_str = cfg.tune.query_dataset_path
         test_dataset_str = cfg.tune.test_dataset_path
 

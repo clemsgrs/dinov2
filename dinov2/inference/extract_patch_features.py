@@ -16,7 +16,9 @@ from dinov2.utils.config import setup, write_config
 from dinov2.utils.utils import initialize_wandb
 from dinov2.data import SamplerType, make_data_loader
 from dinov2.data.datasets import ImageFolderWithNameDataset
-from dinov2.data.transforms import make_classification_eval_transform
+
+# from dinov2.data.transforms import make_classification_eval_transform
+from dinov2.data.transforms import make_feature_extraction_transform
 
 
 def get_args_parser(add_help: bool = True):
@@ -83,7 +85,8 @@ def main(args):
         verbose=distributed.is_main_process(),
     )
 
-    transform = make_classification_eval_transform()
+    # transform = make_classification_eval_transform()
+    transform = make_feature_extraction_transform(image_size=cfg.inference.image_size)
     dataset = ImageFolderWithNameDataset(cfg.inference.data_dir, transform)
 
     if run_distributed:

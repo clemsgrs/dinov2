@@ -4,6 +4,7 @@ train:
   centering: sinkhorn_knopp
 inference:
   data_dir: /root/data
+  image_size: 256
   batch_size: 64
   num_workers: 8
 student:

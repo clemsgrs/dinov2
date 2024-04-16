@@ -20,7 +20,7 @@ from dinov2.data import SamplerType, make_data_loader, make_dataset
 from dinov2.eval.metrics import AccuracyAveraging, build_metric
 from dinov2.utils.utils import initialize_wandb
 from dinov2.utils.config import setup, write_config
-from dinov2.eval.setup import setup_and_build_model
+from dinov2.models import setup_and_build_model
 from dinov2.eval.utils import ModelWithNormalize, evaluate, extract_features
 from dinov2.data.transforms import make_classification_eval_transform
 
@@ -387,7 +387,7 @@ def main(args):
 
     model, autocast_dtype = setup_and_build_model(cfg)
 
-    transform = make_classification_eval_transform()
+    transform = make_classification_eval_transform(image_size=cfg.data.image_size)
     query_dataset_str = cfg.data.query_dataset
     test_dataset_str = cfg.data.test_dataset
     query_dataset = make_dataset(

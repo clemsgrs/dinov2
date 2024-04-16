@@ -9,3 +9,4 @@ from .pathology import PathologyDataset
 from .knn import KNNDataset
 from .foundation import PathologyFoundationDataset
 from .image_folder import ImageFolderWithNameDataset
+from .regions import SlideIDsDataset, SlideRegionDataset
