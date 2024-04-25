@@ -31,9 +31,9 @@ from dinov2.eval.knn import eval_knn_with_model
 from dinov2.eval.setup import get_autocast_dtype
 from dinov2.eval.metrics import AccuracyAveraging
 from dinov2.eval.utils import EarlyStoppingDINO
-
-
 from dinov2.train.ssl_meta_arch import SSLMetaArch
+
+from memory_profiler import profile
 
 
 torch.backends.cuda.matmul.allow_tf32 = True  # PyTorch 1.12 sets this to False by default
@@ -262,6 +262,7 @@ def do_tune(
     return results
 
 
+@profile
 def do_train(cfg, model, gpu_id, run_distributed, resume=False):
     model.train()
     inputs_dtype = torch.half
@@ -332,7 +333,10 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
 
     total_batch_size = cfg.train.batch_size_per_gpu * distributed.get_global_size()
     OFFICIAL_EPOCH_LENGTH = len(dataset) // total_batch_size
-    max_iter = cfg.optim.epochs * OFFICIAL_EPOCH_LENGTH
+    if cfg.train.max_iter is not None:
+        max_iter = cfg.optim.max_iter
+    else:
+        max_iter = cfg.optim.epochs * OFFICIAL_EPOCH_LENGTH
 
     periodic_checkpointer = PeriodicCheckpointer(
         checkpointer,
