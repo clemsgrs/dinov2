@@ -6,6 +6,7 @@
 from .image_net import ImageNet
 from .image_net_22k import ImageNet22k
 from .pathology import PathologyDataset
+from .pathology_on_the_fly import PathologyOnTheFlyDataset
 from .knn import KNNDataset
 from .foundation import PathologyFoundationDataset
 from .image_folder import ImageFolderWithNameDataset
