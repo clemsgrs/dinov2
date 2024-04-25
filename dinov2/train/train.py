@@ -387,9 +387,11 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
     iteration = start_iter
 
     logger.info("Starting training from iteration {}".format(start_iter))
-    metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
+    metrics_file = os.path.join(
+        cfg.train.output_dir, f"training_metrics_{cfg.student.arch}_{cfg.training.batch_size_per_gpu}.json"
+    )
     metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file)
-    log_freq = None
+    log_freq = 10  # log_freq has to be smaller than the window_size used with instantiating SmoothedValue (here and in MetricLogger)
     header = "Train"
 
     forward_backward_time = SmoothedValue(fmt="{avg:.6f}")

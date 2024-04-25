@@ -90,7 +90,7 @@ class MetricLogger(object):
             ncols=80,
             unit_scale=1,
             initial=start_iteration,
-            total=n_iterations,
+            total=n_iterations - 1,
             leave=self.verbose,
             file=sys.stdout,
             disable=not (gpu_id in [-1, 0]),
