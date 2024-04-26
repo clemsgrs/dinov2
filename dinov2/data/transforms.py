@@ -97,7 +97,7 @@ def make_classification_eval_transform(
     return transforms.Compose(transforms_list)
 
 
-def make_feature_extraction_transform(
+def make_slide_feature_extraction_transform(
     image_size: int,
     resize_size: int = 224,
     interpolation=transforms.InterpolationMode.BICUBIC,

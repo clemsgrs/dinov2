@@ -18,8 +18,7 @@ from dinov2.data import SamplerType
 from dinov2.data.loaders import _make_sampler
 from dinov2.data.datasets import SlideIDsDataset, SlideRegionDataset
 
-# from dinov2.data.transforms import make_classification_eval_transform
-from dinov2.data.transforms import make_feature_extraction_transform
+from dinov2.data.transforms import make_slide_feature_extraction_transform
 
 
 def get_args_parser(add_help: bool = True):
@@ -89,8 +88,10 @@ def main(args):
         verbose=distributed.is_main_process(),
     )
 
-    # transform = make_classification_eval_transform()
-    transform = make_feature_extraction_transform(cfg.inference.patch_size)
+    # TODO: DINOv2 models expect (224,224) inputs, but we unroll the slide into (256,256) patches
+    # these get resized to (224,224) before being passed to the model, which is not ideal
+    # as it slightly changes the resolution (e.g. from 0.5 mpp to 0.44 mpp)
+    transform = make_slide_feature_extraction_transform(cfg.inference.patch_size)
 
     root_dir = Path(cfg.inference.root_dir)
     slide_ids = sorted([s.name for s in root_dir.iterdir()])
