@@ -108,6 +108,7 @@ teacher:
   warmup_teacher_temp_epochs: 30
 optim:
   epochs: 100
+  max_iter:
   weight_decay: 0.04
   weight_decay_end: 0.4
   base_lr: 0.004  # learning rate for a batch size of 1024

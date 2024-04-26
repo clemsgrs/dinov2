@@ -7,6 +7,8 @@ import argparse
 import logging
 import math
 import os
+import time
+import json
 import wandb
 import tqdm
 import datetime
@@ -23,7 +25,7 @@ from dinov2.data import collate_data_and_cast, DataAugmentationDINO, MaskingGene
 from dinov2.data.transforms import make_classification_eval_transform
 import dinov2.distributed as distributed
 from dinov2.fsdp import FSDPCheckpointer
-from dinov2.logging import MetricLogger
+from dinov2.logging import MetricLogger, SmoothedValue
 from dinov2.utils.config import setup, write_config
 from dinov2.utils.utils import CosineScheduler, initialize_wandb, load_weights
 from dinov2.models import build_model_from_cfg
@@ -31,7 +33,6 @@ from dinov2.eval.knn import eval_knn_with_model
 from dinov2.eval.setup import get_autocast_dtype
 from dinov2.eval.metrics import AccuracyAveraging
 from dinov2.eval.utils import EarlyStoppingDINO
-
 
 from dinov2.train.ssl_meta_arch import SSLMetaArch
 
@@ -332,7 +333,10 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
 
     total_batch_size = cfg.train.batch_size_per_gpu * distributed.get_global_size()
     OFFICIAL_EPOCH_LENGTH = len(dataset) // total_batch_size
-    max_iter = cfg.optim.epochs * OFFICIAL_EPOCH_LENGTH
+    if cfg.optim.max_iter is not None:
+        max_iter = cfg.optim.max_iter
+    else:
+        max_iter = cfg.optim.epochs * OFFICIAL_EPOCH_LENGTH
 
     periodic_checkpointer = PeriodicCheckpointer(
         checkpointer,
@@ -383,14 +387,19 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
     iteration = start_iter
 
     logger.info("Starting training from iteration {}".format(start_iter))
-    metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
+    metrics_file = os.path.join(
+        cfg.train.output_dir, f"training_metrics_{cfg.student.arch}_{cfg.training.batch_size_per_gpu}.json"
+    )
     metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file)
+    log_freq = 10  # log_freq has to be smaller than the window_size used with instantiating SmoothedValue (here and in MetricLogger)
     header = "Train"
+
+    forward_backward_time = SmoothedValue(fmt="{avg:.6f}")
 
     for data in metric_logger.log_every(
         data_loader,
-        10,
         gpu_id,
+        log_freq,
         header,
         max_iter,
         start_iter,
@@ -411,7 +420,18 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
         # compute losses
 
         optimizer.zero_grad(set_to_none=True)
+        forward_backward_start = time.time()
         loss_dict = model.forward_backward(data, teacher_temp=teacher_temp)
+        forward_backward_time.update(time.time() - forward_backward_start)
+
+        if metrics_file is not None and distributed.is_main_process():
+            if (log_freq is not None and iteration % log_freq == 0) or iteration == max_iter - 1:
+                dict_to_dump = dict(
+                    iteration=iteration,
+                    forward_backward_time=forward_backward_time.avg,
+                )
+                with open(metrics_file, "a") as f:
+                    f.write(json.dumps(dict_to_dump) + "\n")
 
         # clip gradients
 

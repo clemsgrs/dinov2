@@ -68,7 +68,7 @@ def evaluate(
     metric_logger = MetricLogger(delimiter="  ", verbose=verbose)
     header = "Test"
 
-    for samples, targets, *_ in metric_logger.log_every(data_loader, 10, device, header):
+    for samples, targets, *_ in metric_logger.log_every(data_loader, device, 10, header):
         # given model went through ModelWithNormalize, outputs are already normalized
         outputs = model(samples.to(device))
         targets = targets.to(device)
