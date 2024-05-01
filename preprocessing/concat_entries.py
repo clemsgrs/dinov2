@@ -1,3 +1,4 @@
+import h5py
 import tqdm
 import argparse
 import numpy as np
@@ -12,33 +13,36 @@ def concat_entries(
     suffix: Optional[str] = None,
 ):
     try:
-        cohort_indices = {}  # store cohort names with an index
+        slide_names = []  # store slide names
         concat_entries = np.load(entries_paths[0])
-        cohort_index_column = np.full((concat_entries.shape[0], 1), 0)
-        concat_entries = np.hstack([concat_entries, cohort_index_column])
-        cohort_name = entries_paths[0].stem.split("_entries")[0]
-        cohort_indices[0] = cohort_name
+        slide_index_column = np.full((concat_entries.shape[0], 1), 0)
+        concat_entries = np.hstack([concat_entries, slide_index_column])
+        slide_name = entries_paths[0].stem
+        slide_names[0] = slide_name
 
         # load and concatenate the rest of the files
         with tqdm.tqdm(
             entries_paths[1:],
             desc="Concatenating entries",
-            unit=" file",
+            unit=" slide",
             initial=1,
             total=len(entries_paths),
             leave=True,
         ) as t:
             for i, e in enumerate(t):
                 data = np.load(e)
-                cohort_index_column = np.full((data.shape[0], 1), i + 1)
-                data = np.hstack([data, cohort_index_column])
-                cohort_name = e.stem.split("_entries")[0]
-                cohort_indices[i + 1] = cohort_name
+                slide_index_column = np.full((data.shape[0], 1), i + 1)
+                data = np.hstack([data, slide_index_column])
+                slide_name = e.stem
+                slide_names[i + 1] = slide_name
                 concat_entries = np.concatenate((concat_entries, data))
 
-        # save cohort indices
-        cohort_indices_filepath = Path(output_root, "cohort_indices.npy")
-        np.save(cohort_indices_filepath, cohort_indices)
+        # save slide names via HDF5
+        slide_names_filepath = Path(output_root, "slide_names.hdf5")
+        with h5py.File(slide_names_filepath, "w") as h5f:
+            dt = h5py.string_dtype(encoding="utf-8")
+            h5f.create_dataset("slide_names", data=slide_names, dtype=dt)
+        print(f"Slide names saved to: {slide_names_filepath}")
 
         # save concatenated entries
         if suffix:
@@ -72,7 +76,7 @@ def main():
     suffix = f"{args.suffix}" if args.suffix else None
 
     # grab all entries
-    entries_paths = sorted([fp for fp in Path(args.root).glob("*.npy") if "entries" in str(fp.name)])
+    entries_paths = sorted([fp for fp in Path(args.root).glob("*.npy")])
     assert len(entries_paths) > 0, f"0 entry file found under {args.root}"
     print(f"{len(entries_paths)} entry files found!")
 

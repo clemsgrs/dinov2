@@ -1,11 +1,11 @@
+import h5py
 import numpy as np
 import multiresolutionimageinterface as mir
 
+from PIL import Image
 from pathlib import Path
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple, List
 from torchvision.datasets import VisionDataset
-
-from .decoders import ImageDataDecoder
 
 
 class _Subset:
@@ -31,8 +31,7 @@ class PathologyOnTheFlyDataset(VisionDataset):
         super().__init__(root, transforms, transform, target_transform)
         self._subset = subset
         self._reader = mir.MultiResolutionImageReader()
-        # TODO: make this more memory & time efficient
-        self._filepaths = np.load(Path(root, "pretrain_slide_indices.npy"), allow_pickle=True).item()
+        self._load_slide_names()
         self._get_entries()
 
     @property
@@ -50,9 +49,13 @@ class PathologyOnTheFlyDataset(VisionDataset):
         entries_path = Path(self.root, _entries_name)
         return np.load(entries_path, mmap_mode="r")
 
+    def _load_slide_names(self) -> List[str]:
+        slide_names_path = Path(self.root, "slide_names.hdf5")
+        with h5py.File(slide_names_path, "r") as h5f:
+            self._slide_names = list(h5f["slide_names"])  # Load all filenames into memory
+
     def get_slide_path(self, idx: int) -> str:
-        # TODO: make this more memory & time efficient
-        return self._filepaths[idx]
+        return self._slide_names[idx]
 
     def get_slide(self, path: str) -> mir.MultiResolutionImage:
         return self._reader.open(path)
@@ -71,7 +74,7 @@ class PathologyOnTheFlyDataset(VisionDataset):
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         try:
             image_data = self.get_image_data(index)
-            image = ImageDataDecoder(image_data).decode()
+            image = Image.fromarray(image_data)
         except Exception as e:
             raise RuntimeError(f"Cannot read image for sample {index}") from e
 
