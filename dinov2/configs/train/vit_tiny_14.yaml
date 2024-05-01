@@ -16,11 +16,10 @@ tune:
   knn:
     batch_size: 64
 student:
-  arch: vit_small
+  arch: vit_tiny
   patch_size: 14
   num_register_tokens: 0
   pretrained_weights:
-  # pretrained_weights: 'checkpoints/dinov2_vits14_pretrain.pth'
   drop_path_rate: 0.4
   ffn_layer: swiglufused
   block_chunks: 4
@@ -35,10 +34,10 @@ optim:
 crops:
   local_crops_size: 98
 wandb:
-  enable: false
-  project: 'vision'
+  enable: true
+  project: 'dinov2'
   username: 'vlfm'
-  exp_name: 'dinov2'
+  exp_name: 'profiling'
   tags: ['${wandb.exp_name}', 'patch', '${student.arch}']
   dir: '/home/user'
   group:

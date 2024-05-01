@@ -1,7 +1,9 @@
 dino:
+  head_n_prototypes: 131072
   head_bottleneck_dim: 384
 ibot:
   separate_head: true
+  head_n_prototypes: 131072
 train:
   batch_size_per_gpu: 128
   dataset_path: PathologyFoundation:root=/root/data
@@ -16,12 +18,12 @@ tune:
   knn:
     batch_size: 64
 student:
-  arch: vit_small
-  patch_size: 16
+  arch: vit_large
+  patch_size: 14
   num_register_tokens: 0
-  pretrained_weights:
+  pretrained_weights: # 'checkpoints/dinov2_vitl14_pretrain.pth'
   drop_path_rate: 0.4
-  ffn_layer: swiglufused
+  ffn_layer: mlp
   block_chunks: 4
 teacher:
   momentum_teacher: 0.994
@@ -29,15 +31,15 @@ optim:
   epochs: 100
   weight_decay_end: 0.2
   base_lr: 2.0e-03 # learning rate for a batch size of 1024, will get scaled in apply_scaling_rules_to_cfg
-  warmup_epochs: 16
+  warmup_epochs: 80
   layerwise_decay: 1.0
 crops:
   local_crops_size: 98
 wandb:
-  enable: false
-  project: 'vision'
+  enable: true
+  project: 'dinov2'
   username: 'vlfm'
-  exp_name: 'dinov2'
+  exp_name: 'profiling'
   tags: ['${wandb.exp_name}', 'patch', '${student.arch}']
   dir: '/home/user'
   group:

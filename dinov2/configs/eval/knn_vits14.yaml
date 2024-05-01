@@ -1,0 +1,37 @@
+data:
+  query_dataset: KNN:root=/root/data:split=query:subset=0
+  test_dataset: KNN:root=/root/data:split=test:subset=0
+  batch_size: 256
+  image_size: 256
+dino:
+  head_bottleneck_dim: 384
+train:
+  centering: sinkhorn_knopp
+  output_dir: ./output
+student:
+  arch: vit_small
+  patch_size: 14
+  num_register_tokens: 0
+  pretrained_weights: '/data/pathology/projects/ais-cap/clement/code/dinov2/output/769naczt/eval/training_649999/teacher_checkpoint.pth'
+  drop_path_rate: 0.4
+  ffn_layer: swiglufused
+  block_chunks: 4
+crops:
+  local_crops_size: 98
+knn:
+  nb_knn: [10, 20, 100, 200]
+  temperature: 0.07
+  n_tries: 1
+  n_per_class_list: [-1]
+speed:
+  num_workers: 8
+  gather_on_cpu: false
+wandb:
+  enable: false
+  project: 'vision'
+  username: 'vlfm'
+  exp_name: 'eval'
+  tags: ['${wandb.exp_name}', 'dinov2', 'knn', '${student.arch}']
+  dir: '/home/user'
+  group:
+  resume_id:

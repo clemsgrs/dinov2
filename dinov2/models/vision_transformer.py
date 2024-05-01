@@ -204,7 +204,7 @@ class DinoVisionTransformer(nn.Module):
         else:
             # Simply specify an output size instead of a scale factor
             kwargs["size"] = (w0, h0)
-        logger.info(f"Interpolating position encoding from {M}x{M} to {w0}x{h0}")
+        # logger.info(f"Interpolating position encoding from {M}x{M} to {w0}x{h0}")
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.reshape(1, M, M, dim).permute(0, 3, 1, 2),
             mode="bicubic",
@@ -340,6 +340,20 @@ def init_weights_vit_timm(module: nn.Module, name: str = ""):
         trunc_normal_(module.weight, std=0.02)
         if module.bias is not None:
             nn.init.zeros_(module.bias)
+
+
+def vit_tiny(patch_size=16, num_register_tokens=0, **kwargs):
+    model = DinoVisionTransformer(
+        patch_size=patch_size,
+        embed_dim=192,
+        depth=12,
+        num_heads=3,
+        mlp_ratio=4,
+        block_fn=partial(Block, attn_class=MemEffAttention),
+        num_register_tokens=num_register_tokens,
+        **kwargs,
+    )
+    return model
 
 
 def vit_small(patch_size=16, num_register_tokens=0, **kwargs):
