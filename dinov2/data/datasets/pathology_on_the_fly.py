@@ -65,16 +65,16 @@ class PathologyOnTheFlyDataset(VisionDataset):
 
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
-        x, y, tile_size, level, slide_idx = entry[0], entry[1], entry[2], entry[3], entry[4]
+        x, y, tile_size, level, rsize_factor, slide_idx = entry[0], entry[1], entry[2], entry[3], entry[4], entry[5]
         slide_path = self.get_slide_path(slide_idx)
         slide = self.get_slide(slide_path)
-        tile = self.get_tile(slide, x, y, tile_size, level)
-        return tile
+        tile = self.get_tile(slide, x, y, tile_size * rsize_factor, level)
+        return tile, tile_size
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         try:
-            image_data = self.get_image_data(index)
-            image = Image.fromarray(image_data)
+            image_data, target_size = self.get_image_data(index)
+            image = Image.fromarray(image_data).resize((target_size, target_size))
         except Exception as e:
             raise RuntimeError(f"Cannot read image for sample {index}") from e
 
