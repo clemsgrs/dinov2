@@ -73,13 +73,6 @@ class PathologyFoundationDataset(VisionDataset):
         entries_path = Path(self.root, _entries_name)
         return np.load(entries_path, mmap_mode="r")
 
-    def _get_filepaths_dict(self, cohort_name: str):
-        return self._load_filepaths_dict(cohort_name)
-
-    def _load_filepaths_dict(self, cohort_name: str):
-        filepaths_dict_path = Path(self.root, f"{cohort_name}_file_indices.npy")
-        return np.load(filepaths_dict_path, allow_pickle=True).item()
-
     def _get_cohort_names(self) -> dict:
         self._cohort_names = self._load_cohort_names()
 
@@ -89,15 +82,11 @@ class PathologyFoundationDataset(VisionDataset):
 
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
-        file_idx, start_offset, end_offset, cohort_idx = entry[1], entry[2], entry[3], entry[4]
+        start_offset, end_offset, cohort_idx = entry[1], entry[2], entry[3], entry[4]
         cohort_name = self._cohort_names[cohort_idx]
-        # disabling file path fetching to gain some speed
-        # filepaths_dict = self._get_filepaths_dict(cohort_name)
-        # filepath = filepaths_dict[file_idx]
-        filepath = f"{file_idx}"
         class_mmap = self._mmap_tarball(cohort_name)
         data = class_mmap[start_offset:end_offset]
-        return data, Path(filepath)
+        return data
 
     def get_target(self, index: int) -> Any:
         return int(self._entries[index][0])
@@ -107,7 +96,7 @@ class PathologyFoundationDataset(VisionDataset):
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         try:
-            image_data, _ = self.get_image_data(index)
+            image_data = self.get_image_data(index)
             image = ImageDataDecoder(image_data).decode()
         except Exception as e:
             raise RuntimeError(f"can not read image for sample {index} ({e})") from e
