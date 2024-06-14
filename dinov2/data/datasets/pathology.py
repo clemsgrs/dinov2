@@ -29,12 +29,14 @@ class PathologyDataset(VisionDataset):
         self,
         *,
         root: str,
+        extra: str,
         subset: Optional["PathologyDataset.Subset"] = None,
         transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
+        self.extra = extra
         self._subset = subset
         self._get_entries()
         self._mmap_tarball = _make_mmap_tarball(Path(root, "pretrain_dataset.tar"))
@@ -51,7 +53,7 @@ class PathologyDataset(VisionDataset):
         self._entries = self._load_entries(self._entries_name)
 
     def _load_entries(self, _entries_name: str) -> np.ndarray:
-        entries_path = Path(self.root, _entries_name)
+        entries_path = Path(self.extra, _entries_name)
         return np.load(entries_path, mmap_mode="r")
 
     def get_image_data(self, index: int) -> bytes:

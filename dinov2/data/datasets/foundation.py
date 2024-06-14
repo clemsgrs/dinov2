@@ -42,6 +42,7 @@ class PathologyFoundationDataset(VisionDataset):
         self,
         *,
         root: str,
+        extra: str,
         subset: Optional["PathologyFoundationDataset.Subset"] = None,
         transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
@@ -49,6 +50,7 @@ class PathologyFoundationDataset(VisionDataset):
         mmap_cache_size: int = _DEFAULT_MMAP_CACHE_SIZE,
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
+        self.extra = extra
         self._subset = subset
         self._get_entries()
         self._get_cohort_names()
@@ -70,14 +72,14 @@ class PathologyFoundationDataset(VisionDataset):
         self._entries = self._load_entries(self._entries_name)
 
     def _load_entries(self, _entries_name: str) -> np.ndarray:
-        entries_path = Path(self.root, _entries_name)
+        entries_path = Path(self.extra, _entries_name)
         return np.load(entries_path, mmap_mode="r")
 
     def _get_cohort_names(self) -> dict:
         self._cohort_names = self._load_cohort_names()
 
     def _load_cohort_names(self) -> dict:
-        cohort_dict_path = Path(self.root, "cohort_indices.npy")
+        cohort_dict_path = Path(self.extra, "cohort_indices.npy")
         return np.load(cohort_dict_path, allow_pickle=True).item()
 
     def get_image_data(self, index: int) -> bytes:

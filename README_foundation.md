@@ -118,7 +118,7 @@ Update `dinov2/configs/train/vitl14.yaml` if you want to change some parameters,
 ```shell
 python -m torch.distributed.run --nproc_per_node=gpu dinov2/train/train.py \
     --config-file dinov2/configs/train/vitl14.yaml \
-    train.dataset_path=PathologyFoundation:root={path/to/data/root}
+    train.dataset_path=PathologyFoundation:root={path/to/data/root}:extra={path/to/entry/root}
 ```
 
-Replace `{path/to/data/root}` with the folder you chose for `--output_root` in data preparation (e.g. `PathologyFoundation:root=/root/data`).
+Replace `{path/to/data/root}` with the root folder where tarballs are saved, and `{path/to/entry/root}` with the root folder where numpy entry files are saved (e.g. `PathologyFoundation:root=/root/data:extra=/root/data`).<br>

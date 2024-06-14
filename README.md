@@ -96,7 +96,7 @@ Then, follow these simple steps:
     ```shell
     tar -chf downstream_dataset.tar /path/to/downstream/dataset/image/folder
     ```
-   
+
 4. Infer the auxiliary files `query_entries.npy` and `query_file_indices.npy` :
 
     ```
@@ -143,19 +143,20 @@ Then run:
 ```shell
 python -m torch.distributed.run --nproc_per_node=gpu dinov2/train/train.py \
     --config-file dinov2/configs/train/vitl14.yaml \
-    train.dataset_path=Pathology:root={path/to/data/root}:subset={subset}
+    train.dataset_path=Pathology:root={path/to/tarball/root}:extra={path/to/entry/root}:subset={subset}
 ```
 
-Replace `{path/to/data/root}` with the folder you chose for `--output_root` in data preparation (e.g. `Pathology:root=/root/data`).<br>
+Replace `{path/to/data/root}` with the root folder where tarballs are saved, and `{path/to/entry/root}` with the root folder where numpy entry files are saved (e.g. `Pathology:root=/root/data:extra=/root/data`).<br>
 Leave out `:subset={subset}` if you didn't restrict the dataset to a specific subset when preparing data.<br>
-Otherwise, replace `{subset}` with the suffix you chose for `--suffix` in data preparation (e.g. `Pathology:root=/root/data:subset=train`).
+Otherwise, replace `{subset}` with the suffix you chose for `--suffix` in data preparation (e.g. `Pathology:root=/root/data:extra=/root/data:subset=train`).
 
 In case you want to run downstream tuning, make sure to update the following two parameters in your config:
 
 ```shell
 tune:
-  query_dataset_path: KNN:root={path/to/data/root}:split=query
-  test_dataset_path: KNN:root={path/to/data/root}:split=test
+  query_dataset_path: KNN:root={path/to/data/root}:extra={path/to/entry/root}:split=query
+  test_dataset_path: KNN:root={path/to/data/root}:extra={path/to/entry/root}:split=test
 ```
 
-Replace `{path/to/data/root}` with the folder where you dumped the downstream `.tar` file and `.npy` files during data preparation.
+Replace `{path/to/data/root}` with the folder where you dumped the downstream `.tar` files.
+Replace `{path/to/entry/root}` with the folder where you dumped the downstream `.npy` entry files.
