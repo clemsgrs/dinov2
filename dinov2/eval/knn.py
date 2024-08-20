@@ -243,7 +243,7 @@ def eval_knn(
         persistent_workers=persistent_workers,
         verbose=verbose,
     )
-    num_classes = query_labels.max() + 1
+    num_classes = len(torch.unique(query_labels))
     metric_collection = build_metric(num_classes=num_classes, average_type=accuracy_averaging)
 
     device = torch.cuda.current_device()

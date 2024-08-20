@@ -6,7 +6,9 @@
 import math
 import logging
 import os
+import datetime
 
+from pathlib import Path
 from omegaconf import OmegaConf
 
 import dinov2.distributed as distributed
@@ -47,18 +49,32 @@ def get_cfg_from_args(args):
     return cfg
 
 
-def default_setup(args):
+def default_setup(args, cfg):
+    run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M")
+    # set up wandb
+    if cfg.wandb.enable:
+        key = os.environ.get("WANDB_API_KEY")
+        wandb_run = utils.initialize_wandb(cfg, key=key)
+        wandb_run.define_metric("epoch", summary="max")
+        run_id = wandb_run.id
+
+    output_dir = Path(cfg.train.output_dir, run_id)
+    if distributed.is_main_process():
+        output_dir.mkdir(exist_ok=True, parents=True)
+    cfg.train.output_dir = str(output_dir)
+
     distributed.enable(overwrite=True)
     seed = getattr(args, "seed", 0)
     rank = distributed.get_global_rank()
 
     global logger
-    setup_logging(output=args.output_dir, level=logging.INFO)
+    setup_logging(output=cfg.train.output_dir, level=logging.INFO)
     logger = logging.getLogger("dinov2")
 
     utils.fix_random_seeds(seed + rank)
     logger.info("git:\n  {}\n".format(utils.get_sha()))
     logger.info("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
+    return cfg
 
 
 def setup(args):
@@ -66,6 +82,6 @@ def setup(args):
     Create configs and perform basic setups.
     """
     cfg = get_cfg_from_args(args)
-    default_setup(args)
+    cfg = default_setup(args, cfg)
     apply_scaling_rules_to_cfg(cfg)
     return cfg

@@ -1,8 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# This source code is licensed under the Apache License, Version 2.0
-# found in the LICENSE file in the root directory of this source tree.
-
 import argparse
 import logging
 import math
@@ -11,7 +6,6 @@ import time
 import json
 import wandb
 import tqdm
-import datetime
 from functools import partial
 from typing import Optional
 from pathlib import Path
@@ -27,7 +21,7 @@ import dinov2.distributed as distributed
 from dinov2.fsdp import FSDPCheckpointer
 from dinov2.logging import MetricLogger, SmoothedValue
 from dinov2.utils.config import setup, write_config
-from dinov2.utils.utils import CosineScheduler, initialize_wandb, load_weights
+from dinov2.utils.utils import CosineScheduler, load_weights
 from dinov2.models import build_model_from_cfg
 from dinov2.eval.knn import eval_knn_with_model
 from dinov2.eval.setup import get_autocast_dtype
@@ -64,7 +58,7 @@ For python-based LazyConfig, use "path.key=value".
     parser.add_argument(
         "--output-dir",
         "--output_dir",
-        default="",
+        default="output",
         type=str,
         help="Output directory to save logs and checkpoints",
     )
@@ -161,7 +155,6 @@ def do_tune(
     query_dataset,
     test_dataset,
     output_dir,
-    gpu_id,
     verbose: bool = True,
 ):
     # in DINOv2, they have on SSLMetaArch class
@@ -189,8 +182,8 @@ def do_tune(
 
     student = student.to(torch.device("cuda"))
     teacher = teacher.to(torch.device("cuda"))
-    # student = student.to(torch.device(f"cuda:{gpu_id}"))
-    # teacher = teacher.to(torch.device(f"cuda:{gpu_id}"))
+    # student = student.to(torch.device(f"cuda:{distributed.get_global_rank()}"))
+    # teacher = teacher.to(torch.device(f"cuda:{distributed.get_global_rank()}"))
     if verbose:
         tqdm.tqdm.write(f"Loading epoch {epoch} weights...")
     student_weights = model.student.state_dict()
@@ -217,7 +210,7 @@ def do_tune(
         temperature=cfg.tune.knn.temperature,
         autocast_dtype=autocast_dtype,
         accuracy_averaging=AccuracyAveraging.MEAN_ACCURACY,
-        gpu_id=gpu_id,
+        gpu_id=distributed.get_global_rank(),
         gather_on_cpu=cfg.tune.knn.gather_on_cpu,
         batch_size=cfg.tune.knn.batch_size,
         num_workers=0,
@@ -237,7 +230,7 @@ def do_tune(
         temperature=cfg.tune.knn.temperature,
         autocast_dtype=autocast_dtype,
         accuracy_averaging=AccuracyAveraging.MEAN_ACCURACY,
-        gpu_id=gpu_id,
+        gpu_id=distributed.get_global_rank(),
         gather_on_cpu=cfg.tune.knn.gather_on_cpu,
         batch_size=cfg.tune.knn.batch_size,
         num_workers=0,
@@ -263,7 +256,7 @@ def do_tune(
     return results
 
 
-def do_train(cfg, model, gpu_id, run_distributed, resume=False):
+def do_train(cfg, model, resume=False):
     model.train()
     inputs_dtype = torch.half
     fp16_scaler = model.fp16_scaler  # for mixed precision training
@@ -396,7 +389,7 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
 
     for data in metric_logger.log_every(
         data_loader,
-        gpu_id,
+        distributed.get_global_rank(),
         log_freq,
         header,
         max_iter,
@@ -493,7 +486,6 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
                     query_dataset,
                     test_dataset,
                     results_save_dir,
-                    gpu_id,
                     verbose=False,
                 )
 
@@ -502,7 +494,7 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
                         for name, value in metrics_dict.items():
                             update_log_dict(log_dict, f"tune/{model_name}.{name}", value, step="epoch")
 
-            early_stopper(epoch, tune_results, periodic_checkpointer, run_distributed, iteration)
+            early_stopper(epoch, tune_results, periodic_checkpointer, distributed.is_enabled(), iteration)
             if early_stopper.early_stop and cfg.tune.early_stopping.enable:
                 stop = True
 
@@ -523,7 +515,7 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
             do_test(cfg, model, f"training_{iteration}")
             torch.cuda.synchronize()
 
-        periodic_checkpointer.step(iteration, run_distributed=run_distributed)
+        periodic_checkpointer.step(iteration, run_distributed=distributed.is_enabled())
 
         iteration = iteration + 1
 
@@ -535,35 +527,6 @@ def do_train(cfg, model, gpu_id, run_distributed, resume=False):
 
 def main(args):
     cfg = setup(args)
-
-    run_distributed = torch.cuda.device_count() > 1
-    if run_distributed:
-        gpu_id = int(os.environ["LOCAL_RANK"])
-    else:
-        gpu_id = -1
-
-    if distributed.is_main_process():
-        print(f"torch.cuda.device_count(): {torch.cuda.device_count()}")
-        run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M")
-        # set up wandb
-        if cfg.wandb.enable:
-            key = os.environ.get("WANDB_API_KEY")
-            wandb_run = initialize_wandb(cfg, key=key)
-            wandb_run.define_metric("epoch", summary="max")
-            run_id = wandb_run.id
-    else:
-        run_id = ""
-
-    if run_distributed:
-        obj = [run_id]
-        torch.distributed.broadcast_object_list(obj, 0, device=torch.device(f"cuda:{gpu_id}"))
-        run_id = obj[0]
-
-    output_dir = Path(cfg.train.output_dir, run_id)
-    if distributed.is_main_process():
-        output_dir.mkdir(exist_ok=True, parents=True)
-    cfg.train.output_dir = str(output_dir)
-
     if distributed.is_main_process():
         write_config(cfg, cfg.train.output_dir)
 
@@ -580,7 +543,7 @@ def main(args):
         )
         return do_test(cfg, model, f"manual_{iteration}")
 
-    do_train(cfg, model, gpu_id, run_distributed, resume=not args.no_resume)
+    do_train(cfg, model, resume=not args.no_resume)
 
 
 if __name__ == "__main__":

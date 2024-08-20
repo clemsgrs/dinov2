@@ -3,7 +3,7 @@ dino:
 ibot:
   separate_head: true
 train:
-  batch_size_per_gpu: 128
+  batch_size_per_gpu: 32
   dataset_path: PathologyFoundation:root=/root/data
   centering: sinkhorn_knopp
   num_workers: 8
@@ -34,7 +34,7 @@ optim:
 crops:
   local_crops_size: 98
 wandb:
-  enable: true
+  enable: false
   project: 'dinov2'
   username: 'vlfm'
   exp_name: 'profiling'
