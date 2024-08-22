@@ -84,7 +84,7 @@ class PathologyFoundationDataset(VisionDataset):
 
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
-        start_offset, end_offset, cohort_idx = entry[1], entry[2], entry[3], entry[4]
+        start_offset, end_offset, cohort_idx = entry[2], entry[3], entry[4]
         cohort_name = self._cohort_names[cohort_idx]
         class_mmap = self._mmap_tarball(cohort_name)
         data = class_mmap[start_offset:end_offset]
