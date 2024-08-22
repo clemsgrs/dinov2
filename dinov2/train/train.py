@@ -6,13 +6,15 @@ import time
 import json
 import wandb
 import tqdm
+import torch
+
 from functools import partial
 from typing import Optional
 from pathlib import Path
 from collections import defaultdict
+from torch.profiler import profile, schedule, ProfilerActivity, tensorboard_trace_handler
 
 from fvcore.common.checkpoint import PeriodicCheckpointer
-import torch
 
 from dinov2.data import SamplerType, make_data_loader, make_dataset
 from dinov2.data import collate_data_and_cast, DataAugmentationDINO, MaskingGenerator
@@ -64,6 +66,13 @@ For python-based LazyConfig, use "path.key=value".
     )
 
     return parser
+
+
+def trace_handler(p, save_dir: Path):
+    output = p.key_averages().table(sort_by="self_cuda_time_total", row_limit=10)
+    print(output)
+    save_fp = Path(save_dir, f"trace_{p.step_num}.json")
+    p.export_chrome_trace(str(save_fp))
 
 
 def build_optimizer(cfg, params_groups):
@@ -387,137 +396,150 @@ def do_train(cfg, model, resume=False):
 
     forward_backward_time = SmoothedValue(fmt="{avg:.6f}")
 
-    for data in metric_logger.log_every(
-        data_loader,
-        distributed.get_global_rank(),
-        log_freq,
-        header,
-        max_iter,
-        start_iter,
-    ):
-        current_batch_size = data["collated_global_crops"].shape[0] / 2
-        if iteration > max_iter:
-            return
+    with profile(
+        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+        schedule=schedule(wait=10, warmup=1, active=10, repeat=10),
+        on_trace_ready=tensorboard_trace_handler(cfg.train.output_dir),
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=True
+        # on_trace_ready=partial(trace_handler, save_dir=Path(cfg.train.output_dir)),
+    ) as p:
+        for data in metric_logger.log_every(
+            data_loader,
+            distributed.get_global_rank(),
+            log_freq,
+            header,
+            max_iter,
+            start_iter,
+        ):
+            p.step()
+            current_batch_size = data["collated_global_crops"].shape[0] / 2
+            if iteration > max_iter:
+                return
 
-        # apply schedules
+            # apply schedules
 
-        lr = lr_schedule[iteration]
-        wd = wd_schedule[iteration]
-        mom = momentum_schedule[iteration]
-        teacher_temp = teacher_temp_schedule[iteration]
-        last_layer_lr = last_layer_lr_schedule[iteration]
-        apply_optim_scheduler(optimizer, lr, wd, last_layer_lr)
+            lr = lr_schedule[iteration]
+            wd = wd_schedule[iteration]
+            mom = momentum_schedule[iteration]
+            teacher_temp = teacher_temp_schedule[iteration]
+            last_layer_lr = last_layer_lr_schedule[iteration]
+            apply_optim_scheduler(optimizer, lr, wd, last_layer_lr)
 
-        # compute losses
+            # compute losses
 
-        optimizer.zero_grad(set_to_none=True)
-        forward_backward_start = time.time()
-        loss_dict = model.forward_backward(data, teacher_temp=teacher_temp)
-        forward_backward_time.update(time.time() - forward_backward_start)
+            optimizer.zero_grad(set_to_none=True)
+            forward_backward_start = time.time()
+            loss_dict = model.forward_backward(data, teacher_temp=teacher_temp)
+            forward_backward_time.update(time.time() - forward_backward_start)
 
-        if metrics_file is not None and distributed.is_main_process():
-            if (log_freq is not None and iteration % log_freq == 0) or iteration == max_iter - 1:
-                dict_to_dump = dict(
-                    iteration=iteration,
-                    forward_backward_time=forward_backward_time.avg,
-                )
-                with open(metrics_file, "a") as f:
-                    f.write(json.dumps(dict_to_dump) + "\n")
+            if metrics_file is not None and distributed.is_main_process():
+                if (log_freq is not None and iteration % log_freq == 0) or iteration == max_iter - 1:
+                    dict_to_dump = dict(
+                        iteration=iteration,
+                        forward_backward_time=forward_backward_time.avg,
+                    )
+                    with open(metrics_file, "a") as f:
+                        f.write(json.dumps(dict_to_dump) + "\n")
 
-        # clip gradients
+            # clip gradients
 
-        if fp16_scaler is not None:
-            if cfg.optim.clip_grad:
-                fp16_scaler.unscale_(optimizer)
-                for v in model.student.values():
-                    v.clip_grad_norm_(cfg.optim.clip_grad)
-            fp16_scaler.step(optimizer)
-            fp16_scaler.update()
-        else:
-            if cfg.optim.clip_grad:
-                for v in model.student.values():
-                    v.clip_grad_norm_(cfg.optim.clip_grad)
-            optimizer.step()
+            if fp16_scaler is not None:
+                if cfg.optim.clip_grad:
+                    fp16_scaler.unscale_(optimizer)
+                    for v in model.student.values():
+                        v.clip_grad_norm_(cfg.optim.clip_grad)
+                fp16_scaler.step(optimizer)
+                fp16_scaler.update()
+            else:
+                if cfg.optim.clip_grad:
+                    for v in model.student.values():
+                        v.clip_grad_norm_(cfg.optim.clip_grad)
+                optimizer.step()
 
-        # perform teacher EMA update
+            # perform teacher EMA update
 
-        model.update_teacher(mom)
+            model.update_teacher(mom)
 
-        # logging
+            # logging
 
-        if distributed.get_global_size() > 1:
-            for v in loss_dict.values():
-                torch.distributed.all_reduce(v)
-        loss_dict_reduced = {k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()}
+            if distributed.get_global_size() > 1:
+                for v in loss_dict.values():
+                    torch.distributed.all_reduce(v)
+            loss_dict_reduced = {k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()}
 
-        if math.isnan(sum(loss_dict_reduced.values())):
-            logger.info("NaN detected")
-            raise AssertionError
-        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+            if math.isnan(sum(loss_dict_reduced.values())):
+                logger.info("NaN detected")
+                raise AssertionError
+            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
 
-        metric_logger.update(lr=lr)
-        metric_logger.update(wd=wd)
-        metric_logger.update(mom=mom)
-        metric_logger.update(last_layer_lr=last_layer_lr)
-        metric_logger.update(current_batch_size=current_batch_size)
-        metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
+            metric_logger.update(lr=lr)
+            metric_logger.update(wd=wd)
+            metric_logger.update(mom=mom)
+            metric_logger.update(last_layer_lr=last_layer_lr)
+            metric_logger.update(current_batch_size=current_batch_size)
+            metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
 
-        epoch = iteration // OFFICIAL_EPOCH_LENGTH
+            epoch = iteration // OFFICIAL_EPOCH_LENGTH
 
-        # log at the end of each epoch
-        if iteration % OFFICIAL_EPOCH_LENGTH == 0:
-            if distributed.is_main_process() and cfg.wandb.enable:
-                # log the total loss and each individual loss to wandb
-                log_dict = {"epoch": epoch}
-                update_log_dict(log_dict, f"{header.lower()}/lr", lr, step="epoch")
-                update_log_dict(log_dict, f"{header.lower()}/wd", wd, step="epoch")
-                update_log_dict(log_dict, f"{header.lower()}/loss", losses_reduced, step="epoch")
-                for loss_name, loss_value in loss_dict.items():
-                    update_log_dict(log_dict, f"{header.lower()}/{loss_name}", loss_value, step="epoch")
-
-            # optionally run tuning
-            # only run tuning on rank 0, otherwise one has to take care of gathering knn metrics from multiple gpus
-            tune_results = None
-            if cfg.tune.tune_every and epoch % cfg.tune.tune_every == 0:
-                tune_results = do_tune(
-                    cfg,
-                    epoch + 1,
-                    model,
-                    query_dataset,
-                    test_dataset,
-                    results_save_dir,
-                    verbose=False,
-                )
-
+            # log at the end of each epoch
+            if iteration % OFFICIAL_EPOCH_LENGTH == 0:
                 if distributed.is_main_process() and cfg.wandb.enable:
-                    for model_name, metrics_dict in tune_results.items():
-                        for name, value in metrics_dict.items():
-                            update_log_dict(log_dict, f"tune/{model_name}.{name}", value, step="epoch")
+                    # log the total loss and each individual loss to wandb
+                    log_dict = {"epoch": epoch}
+                    update_log_dict(log_dict, f"{header.lower()}/lr", lr, step="epoch")
+                    update_log_dict(log_dict, f"{header.lower()}/wd", wd, step="epoch")
+                    update_log_dict(log_dict, f"{header.lower()}/loss", losses_reduced, step="epoch")
+                    for loss_name, loss_value in loss_dict.items():
+                        update_log_dict(log_dict, f"{header.lower()}/{loss_name}", loss_value, step="epoch")
 
-            early_stopper(epoch, tune_results, periodic_checkpointer, distributed.is_enabled(), iteration)
-            if early_stopper.early_stop and cfg.tune.early_stopping.enable:
-                stop = True
+                # optionally run tuning
+                # only run tuning on rank 0, otherwise one has to take care of gathering knn metrics from multiple gpus
+                tune_results = None
+                if cfg.tune.tune_every and epoch % cfg.tune.tune_every == 0:
+                    tune_results = do_tune(
+                        cfg,
+                        epoch + 1,
+                        model,
+                        query_dataset,
+                        test_dataset,
+                        results_save_dir,
+                        verbose=False,
+                    )
 
-        if stop:
-            if distributed.is_main_process():
-                tqdm.tqdm.write(
-                    f"Stopping early because best {cfg.tune.early_stopping.tracking} was reached {cfg.tune.early_stopping.patience} epochs ago"
-                )
-            break
+                    if distributed.is_main_process() and cfg.wandb.enable:
+                        for model_name, metrics_dict in tune_results.items():
+                            for name, value in metrics_dict.items():
+                                update_log_dict(log_dict, f"tune/{model_name}.{name}", value, step="epoch")
 
-        # save snapshot and log to wandb
-        if distributed.is_main_process() and cfg.wandb.enable and iteration % OFFICIAL_EPOCH_LENGTH == 0:
-            wandb.log(log_dict, step=epoch)
+                early_stopper(epoch, tune_results, periodic_checkpointer, distributed.is_enabled(), iteration)
+                if early_stopper.early_stop and cfg.tune.early_stopping.enable:
+                    stop = True
 
-        # checkpointing and testing
+            if stop:
+                if distributed.is_main_process():
+                    tqdm.tqdm.write(
+                        f"Stopping early because best {cfg.tune.early_stopping.tracking} was reached {cfg.tune.early_stopping.patience} epochs ago"
+                    )
+                break
 
-        if cfg.evaluation.eval_period_iterations > 0 and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0:
-            do_test(cfg, model, f"training_{iteration}")
-            torch.cuda.synchronize()
+            # save snapshot and log to wandb
+            if distributed.is_main_process() and cfg.wandb.enable and iteration % OFFICIAL_EPOCH_LENGTH == 0:
+                wandb.log(log_dict, step=epoch)
 
-        periodic_checkpointer.step(iteration, run_distributed=distributed.is_enabled())
+            # checkpointing and testing
 
-        iteration = iteration + 1
+            if (
+                cfg.evaluation.eval_period_iterations > 0
+                and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
+            ):
+                do_test(cfg, model, f"training_{iteration}")
+                torch.cuda.synchronize()
+
+            periodic_checkpointer.step(iteration, run_distributed=distributed.is_enabled())
+
+            iteration = iteration + 1
 
     # gather stats from all processes
     metric_logger.synchronize_between_processes()

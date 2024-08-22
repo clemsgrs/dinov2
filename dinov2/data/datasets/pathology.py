@@ -58,7 +58,7 @@ class PathologyDataset(VisionDataset):
 
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
-        start_offset, end_offset = entry[1], entry[2], entry[3]
+        start_offset, end_offset = entry[2], entry[3]
         mapped_data = self._mmap_tarball[start_offset:end_offset]
         return mapped_data
 

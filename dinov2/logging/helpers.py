@@ -53,13 +53,14 @@ class MetricLogger(object):
     def add_meter(self, name, meter):
         self.meters[name] = meter
 
-    def dump_in_output_file(self, iteration, iter_time, data_time, cpu_time):
+    def dump_in_output_file(self, iteration, iter_time, data_time, data_yield_time, cpu_time):
         if self.output_file is None or not distributed.is_main_process():
             return
         dict_to_dump = dict(
             iteration=iteration,
             iter_time=iter_time,
             data_time=data_time,
+            data_yield_time=data_yield_time,
             cpu_time=cpu_time,
         )
         dict_to_dump.update({k: v.median for k, v in self.meters.items()})
@@ -78,6 +79,7 @@ class MetricLogger(object):
         cpu_end = time.process_time()
         iter_time = SmoothedValue(fmt="{avg:.6f}")
         data_time = SmoothedValue(fmt="{avg:.6f}")
+        data_yield_time = SmoothedValue(fmt="{avg:.6f}")
         cpu_time = SmoothedValue(fmt="{avg:.6f}")
 
         if n_iterations is None:
@@ -99,11 +101,16 @@ class MetricLogger(object):
         for obj in tqdm_iterable:
             data_time.update(time.time() - end)
             yield obj
+            data_yield_time.update(time.time() - end)
             cpu_time.update(time.process_time() - cpu_end)
             iter_time.update(time.time() - end)
             if ((log_freq is not None and i % log_freq == 0) or i == n_iterations - 1) and print_log:
                 self.dump_in_output_file(
-                    iteration=i, iter_time=iter_time.avg, data_time=data_time.avg, cpu_time=cpu_time.avg
+                    iteration=i,
+                    iter_time=iter_time.avg,
+                    data_time=data_time.avg,
+                    data_yield_time=data_yield_time.avg,
+                    cpu_time=cpu_time.avg,
                 )
             i += 1
             end = time.time()

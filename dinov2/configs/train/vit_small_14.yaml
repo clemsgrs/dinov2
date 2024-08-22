@@ -34,7 +34,7 @@ optim:
 crops:
   local_crops_size: 98
 wandb:
-  enable: true
+  enable: false
   project: 'dinov2'
   username: 'vlfm'
   exp_name: 'profiling'
