@@ -378,6 +378,7 @@ def do_train(cfg, model, resume=False):
     # training loop
 
     iteration = start_iter
+    run_distributed = distributed.is_enabled() and torch.cuda.device_count() > 1
 
     logger.info("Starting training from iteration {}".format(start_iter))
     metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
@@ -494,7 +495,7 @@ def do_train(cfg, model, resume=False):
                         for name, value in metrics_dict.items():
                             update_log_dict(log_dict, f"tune/{model_name}.{name}", value, step="epoch")
 
-            early_stopper(epoch, tune_results, periodic_checkpointer, distributed.is_enabled(), iteration)
+            early_stopper(epoch, tune_results, periodic_checkpointer, run_distributed, iteration)
             if early_stopper.early_stop and cfg.tune.early_stopping.enable:
                 stop = True
 
@@ -515,7 +516,7 @@ def do_train(cfg, model, resume=False):
             do_test(cfg, model, f"training_{iteration}")
             torch.cuda.synchronize()
 
-        periodic_checkpointer.step(iteration, run_distributed=distributed.is_enabled())
+        periodic_checkpointer.step(iteration, run_distributed=run_distributed)
 
         iteration = iteration + 1
 
