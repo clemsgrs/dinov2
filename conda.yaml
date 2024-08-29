@@ -14,10 +14,11 @@ dependencies:
   - tqdm
   - natsort
   - wandb
+  - einops
   - torchmetrics=0.10.3
   - fvcore
   - iopath
-  - xformers::xformers=0.0.18
+  - xformers::xformers
   - pip
   - pip:
     - --extra-index-url https://pypi.nvidia.com
