@@ -136,15 +136,14 @@ def update_log_dict(
     log_dict.update({f"{name}": value})
 
 
-def do_test(cfg, model, iteration):
+def save_checkpoint(cfg, model, iteration):
     new_state_dict = model.teacher.state_dict()
 
     if distributed.is_main_process():
-        iterstring = str(iteration)
-        eval_dir = Path(cfg.train.output_dir, "eval", iterstring)
-        eval_dir.mkdir(exist_ok=True, parents=True)
+        checkpoint_dir = Path(cfg.train.output_dir, "checkpoints", "teacher")
+        checkpoint_dir.mkdir(exist_ok=True, parents=True)
         # save teacher checkpoint
-        teacher_ckp_path = Path(eval_dir, "teacher_checkpoint.pth")
+        teacher_ckp_path = Path(checkpoint_dir, f"teacher_{iteration}.pth")
         torch.save({"teacher": new_state_dict}, teacher_ckp_path)
 
 
@@ -326,6 +325,7 @@ def do_train(cfg, model, resume=False):
 
     total_batch_size = cfg.train.batch_size_per_gpu * distributed.get_global_size()
     OFFICIAL_EPOCH_LENGTH = len(dataset) // total_batch_size
+    save_every = int(cfg.train.save_frequency * OFFICIAL_EPOCH_LENGTH)
     if cfg.optim.max_iter is not None:
         max_iter = cfg.optim.max_iter
     else:
@@ -506,14 +506,15 @@ def do_train(cfg, model, resume=False):
                 )
             break
 
-        # save snapshot and log to wandb
+        # log to wandb
+
         if distributed.is_main_process() and cfg.wandb.enable and iteration % OFFICIAL_EPOCH_LENGTH == 0:
             wandb.log(log_dict, step=epoch)
 
         # checkpointing and testing
 
-        if cfg.evaluation.eval_period_iterations > 0 and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0:
-            do_test(cfg, model, f"training_{iteration}")
+        if cfg.train.save_frequency > 0 and (iteration + 1) % save_every == 0:
+            save_checkpoint(cfg, model, iteration + 1)
             torch.cuda.synchronize()
 
         periodic_checkpointer.step(iteration, run_distributed=run_distributed)
@@ -521,6 +522,7 @@ def do_train(cfg, model, resume=False):
         iteration = iteration + 1
 
     # gather stats from all processes
+
     metric_logger.synchronize_between_processes()
     train_stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
     return train_stats
@@ -542,7 +544,7 @@ def main(args):
             .get("iteration", -1)
             + 1
         )
-        return do_test(cfg, model, f"manual_{iteration}")
+        return save_checkpoint(cfg, model, iteration)
 
     do_train(cfg, model, resume=not args.no_resume)
 

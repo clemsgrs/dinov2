@@ -1,12 +1,8 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# This source code is licensed under the Apache License, Version 2.0
-# found in the LICENSE file in the root directory of this source tree.
-
 import math
 import logging
 import os
 import datetime
+import torch
 
 from pathlib import Path
 from omegaconf import OmegaConf
@@ -50,20 +46,28 @@ def get_cfg_from_args(args):
 
 
 def default_setup(args, cfg):
-    run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M")
-    # set up wandb
-    if cfg.wandb.enable:
-        key = os.environ.get("WANDB_API_KEY")
-        wandb_run = utils.initialize_wandb(cfg, key=key)
-        wandb_run.define_metric("epoch", summary="max")
-        run_id = wandb_run.id
+    distributed.enable(overwrite=True)
+
+    if distributed.is_main_process():
+        run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M")
+        # set up wandb
+        if cfg.wandb.enable:
+            key = os.environ.get("WANDB_API_KEY")
+            wandb_run = utils.initialize_wandb(cfg, key=key)
+            wandb_run.define_metric("epoch", summary="max")
+            run_id = wandb_run.id
+    else:
+        run_id = ""
+
+    if distributed.is_enabled():
+        obj = [run_id]
+        torch.distributed.broadcast_object_list(obj, 0, device=torch.device(f"cuda:{distributed.get_local_rank()}"))
+        run_id = obj[0]
 
     output_dir = Path(cfg.train.output_dir, run_id)
-    if distributed.is_main_process():
-        output_dir.mkdir(exist_ok=True, parents=True)
+    output_dir.mkdir(exist_ok=True, parents=True)
     cfg.train.output_dir = str(output_dir)
 
-    distributed.enable(overwrite=True)
     seed = getattr(args, "seed", 0)
     rank = distributed.get_global_rank()
 

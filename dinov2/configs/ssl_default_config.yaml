@@ -62,11 +62,11 @@ train:
   batch_size_per_gpu: 64
   dataset_path: ImageNet:split=TRAIN
   output_dir: .
-  saveckp_freq: 20
   seed: 0
   num_workers: 8
   cache_dataset: true
   centering: "centering" # or "sinkhorn_knopp"
+  save_frequency: 0.1 # save every 10% of an epoch
   save_every: 5
 tune:
   tune_every:
@@ -132,8 +132,6 @@ crops:
   - 0.32
   global_crops_size: 224
   local_crops_size: 96
-evaluation:
-  eval_period_iterations: 12500
 wandb:
   enable: false
   project: ''

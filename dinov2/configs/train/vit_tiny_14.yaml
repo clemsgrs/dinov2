@@ -4,7 +4,7 @@ ibot:
   separate_head: true
 train:
   batch_size_per_gpu: 32
-  dataset_path: PathologyFoundation:root=/root/data
+  dataset_path: PathologyFoundation:root=/pathology-fm-data/tarballs:extra=/pathology-fm-data/entries
   centering: sinkhorn_knopp
   num_workers: 8
 tune:
@@ -27,6 +27,7 @@ teacher:
   momentum_teacher: 0.994
 optim:
   epochs: 100
+  max_iter: 50000
   weight_decay_end: 0.2
   base_lr: 2.0e-03 # learning rate for a batch size of 1024, will get scaled in apply_scaling_rules_to_cfg
   warmup_epochs: 16
@@ -37,8 +38,8 @@ wandb:
   enable: false
   project: 'dinov2'
   username: 'vlfm'
-  exp_name: 'profiling'
-  tags: ['${wandb.exp_name}', 'patch', '${student.arch}']
+  exp_name: 'dinov2'
+  tags: ['${wandb.exp_name}', '${student.arch}']
   dir: '/home/user'
   group:
   resume_id:
