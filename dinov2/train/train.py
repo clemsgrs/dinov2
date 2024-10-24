@@ -526,7 +526,7 @@ def do_train(cfg, model, resume=False):
         if stop:
             if distributed.is_main_process():
                 tqdm.tqdm.write(
-                    f"Stopping early because best {cfg.tune.early_stopping.tracking} was reached {cfg.tune.early_stopping.patience} epochs ago"
+                    f"Stopping early because best {early_stopper.tracking} was reached {early_stopper.patience} epochs ago"
                 )
             break
 
