@@ -61,23 +61,22 @@ ibot:
 train:
   batch_size_per_gpu: 64
   dataset_path: ImageNet:split=TRAIN
-  output_dir: .
+  output_dir: "output"
   seed: 0
   num_workers: 8
   cache_dataset: true
   centering: "centering" # or "sinkhorn_knopp"
-  save_frequency: 0.1 # save every 10% of an epoch
-  save_every: 5
+  save_frequency: 0.1 # save every x% of an epoch
 tune:
-  tune_every:
+  tune_every: # run tuning every x% of an epoch, leave empty to disable tuning
   query_dataset_path:
   test_dataset_path:
   early_stopping:
     enable: false
     tracking: "auc_20"
     min_max: "max"
-    patience: 20
-    min_epoch: 30
+    patience_pct: 0.2 # stop after x% of total epochs without improvement
+    min_epoch_pct: 0.3 # minimum % of total epochs to run
   knn:
     nb_knn: [10, 20, 100, 200]
     temperature: 0.07
@@ -105,7 +104,7 @@ teacher:
   final_momentum_teacher: 1
   warmup_teacher_temp: 0.04
   teacher_temp: 0.07
-  warmup_teacher_temp_epochs: 30
+  warmup_teacher_temp_pct: 0.3 # warmup for x% of total epochs
 optim:
   epochs: 100
   max_iter:
@@ -113,10 +112,10 @@ optim:
   weight_decay_end: 0.4
   base_lr: 0.004  # learning rate for a batch size of 1024
   lr: 0.  # will be set after applying scaling rule
-  warmup_epochs: 10
+  warmup_pct: 0.1 # percentage of iterations for warmup
   min_lr: 1.0e-06
   clip_grad: 3.0
-  freeze_last_layer_epochs: 1
+  freeze_last_layer_pct: 0.01
   scaling_rule: sqrt_wrt_1024
   patch_embed_lr_mult: 0.2
   layerwise_decay: 0.9

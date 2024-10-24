@@ -24,7 +24,7 @@ def update_state_dict(model_dict, state_dict):
         if v.size() != model_dict[k].size():
             updated_state_dict[k] = model_dict[k]
             failure += 1
-            print(f"{k} | ckpt size: {v.size()} | model size: {model_dict[k].size()}")
+            logger.info(f"{k} | ckpt size: {v.size()} | model size: {model_dict[k].size()}")
         else:
             updated_state_dict[k] = v
             success += 1

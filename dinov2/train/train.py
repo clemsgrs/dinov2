@@ -57,8 +57,6 @@ For python-based LazyConfig, use "path.key=value".
     )
     parser.add_argument(
         "--output-dir",
-        "--output_dir",
-        default="output",
         type=str,
         help="Output directory to save logs and checkpoints",
     )
@@ -75,7 +73,7 @@ def build_schedulers(cfg, OFFICIAL_EPOCH_LENGTH):
         base_value=cfg.optim["lr"],
         final_value=cfg.optim["min_lr"],
         total_iters=cfg.optim["epochs"] * OFFICIAL_EPOCH_LENGTH,
-        warmup_iters=cfg.optim["warmup_epochs"] * OFFICIAL_EPOCH_LENGTH,
+        warmup_iters=int(round(cfg.optim["warmup_pct"] * cfg.optim["epochs"], 0)) * OFFICIAL_EPOCH_LENGTH,
         start_warmup_value=0,
     )
     wd = dict(
@@ -91,8 +89,9 @@ def build_schedulers(cfg, OFFICIAL_EPOCH_LENGTH):
     teacher_temp = dict(
         base_value=cfg.teacher["teacher_temp"],
         final_value=cfg.teacher["teacher_temp"],
-        total_iters=cfg.teacher["warmup_teacher_temp_epochs"] * OFFICIAL_EPOCH_LENGTH,
-        warmup_iters=cfg.teacher["warmup_teacher_temp_epochs"] * OFFICIAL_EPOCH_LENGTH,
+        total_iters=int(round(cfg.teacher["warmup_teacher_temp_pct"] * cfg.optim["epochs"], 0)) * OFFICIAL_EPOCH_LENGTH,
+        warmup_iters=int(round(cfg.teacher["warmup_teacher_temp_pct"] * cfg.optim["epochs"], 0))
+        * OFFICIAL_EPOCH_LENGTH,
         start_warmup_value=cfg.teacher["warmup_teacher_temp"],
     )
 
@@ -103,7 +102,7 @@ def build_schedulers(cfg, OFFICIAL_EPOCH_LENGTH):
     last_layer_lr_schedule = CosineScheduler(**lr)
 
     last_layer_lr_schedule.schedule[
-        : cfg.optim["freeze_last_layer_epochs"] * OFFICIAL_EPOCH_LENGTH
+        : int(round(cfg.optim["freeze_last_layer_pct"] * cfg.optim["epochs"], 0)) * OFFICIAL_EPOCH_LENGTH
     ] = 0  # mimicking the original schedules
 
     logger.info("Schedulers ready.")
@@ -149,7 +148,7 @@ def save_checkpoint(cfg, model, iteration):
 
 def do_tune(
     cfg,
-    epoch,
+    iteration: int,
     model: torch.nn.Module,
     query_dataset,
     test_dataset,
@@ -184,7 +183,7 @@ def do_tune(
     # student = student.to(torch.device(f"cuda:{distributed.get_global_rank()}"))
     # teacher = teacher.to(torch.device(f"cuda:{distributed.get_global_rank()}"))
     if verbose:
-        tqdm.tqdm.write(f"Loading epoch {epoch} weights...")
+        tqdm.tqdm.write(f"Loading epoch {iteration} weights...")
     student_weights = model.student.state_dict()
     teacher_weights = model.teacher.state_dict()
     student_msg = load_weights(student, student_weights)
@@ -325,7 +324,7 @@ def do_train(cfg, model, resume=False):
 
     total_batch_size = cfg.train.batch_size_per_gpu * distributed.get_global_size()
     OFFICIAL_EPOCH_LENGTH = len(dataset) // total_batch_size
-    save_every = int(cfg.train.save_frequency * OFFICIAL_EPOCH_LENGTH)
+    save_every = int(round(cfg.train.save_frequency * OFFICIAL_EPOCH_LENGTH, 0))
     if cfg.optim.max_iter is not None:
         max_iter = cfg.optim.max_iter
     else:
@@ -333,7 +332,7 @@ def do_train(cfg, model, resume=False):
 
     periodic_checkpointer = PeriodicCheckpointer(
         checkpointer,
-        period=cfg.train.save_every * OFFICIAL_EPOCH_LENGTH,
+        period=save_every,
         max_iter=max_iter,
         max_to_keep=3,
     )
@@ -369,8 +368,9 @@ def do_train(cfg, model, resume=False):
     early_stopper = EarlyStoppingDINO(
         cfg.tune.early_stopping.tracking,
         cfg.tune.early_stopping.min_max,
-        cfg.tune.early_stopping.patience,
-        cfg.tune.early_stopping.min_epoch,
+        cfg.optim.epochs,
+        cfg.tune.early_stopping.patience_pct,
+        cfg.tune.early_stopping.min_epoch_pct,
         checkpoint_dir=checkpoint_save_dir,
         verbose=True,
     )
@@ -463,9 +463,19 @@ def do_train(cfg, model, resume=False):
         metric_logger.update(current_batch_size=current_batch_size)
         metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
 
+        # logging
+        if distributed.is_main_process() and cfg.wandb.enable:
+            log_dict = {"iteration": iteration}
+            update_log_dict(log_dict, f"{header.lower()}/lr", lr, step="iteration")
+            update_log_dict(log_dict, f"{header.lower()}/wd", wd, step="iteration")
+            update_log_dict(log_dict, f"{header.lower()}/loss", losses_reduced, step="iteration")
+            for loss_name, loss_value in loss_dict.items():
+                update_log_dict(log_dict, f"{header.lower()}/{loss_name}", loss_value, step="iteration")
+            wandb.log(log_dict, step=iteration)
+
         epoch = iteration // OFFICIAL_EPOCH_LENGTH
 
-        # log at the end of each epoch
+        # addtional logging at the end of each epoch
         if iteration % OFFICIAL_EPOCH_LENGTH == 0:
             if distributed.is_main_process() and cfg.wandb.enable:
                 # log the total loss and each individual loss to wandb
@@ -482,7 +492,7 @@ def do_train(cfg, model, resume=False):
             if cfg.tune.tune_every and epoch % cfg.tune.tune_every == 0:
                 tune_results = do_tune(
                     cfg,
-                    epoch + 1,
+                    iteration,
                     model,
                     query_dataset,
                     test_dataset,
@@ -499,17 +509,9 @@ def do_train(cfg, model, resume=False):
             if early_stopper.early_stop and cfg.tune.early_stopping.enable:
                 stop = True
 
-        if stop:
-            if distributed.is_main_process():
-                tqdm.tqdm.write(
-                    f"Stopping early because best {cfg.tune.early_stopping.tracking} was reached {cfg.tune.early_stopping.patience} epochs ago"
-                )
-            break
-
-        # log to wandb
-
-        if distributed.is_main_process() and cfg.wandb.enable and iteration % OFFICIAL_EPOCH_LENGTH == 0:
-            wandb.log(log_dict, step=epoch)
+            # log to wandb
+            if distributed.is_main_process() and cfg.wandb.enable:
+                wandb.log(log_dict, step=epoch)
 
         # checkpointing and testing
 
@@ -520,6 +522,13 @@ def do_train(cfg, model, resume=False):
         periodic_checkpointer.step(iteration, run_distributed=run_distributed)
 
         iteration = iteration + 1
+
+        if stop:
+            if distributed.is_main_process():
+                tqdm.tqdm.write(
+                    f"Stopping early because best {cfg.tune.early_stopping.tracking} was reached {cfg.tune.early_stopping.patience} epochs ago"
+                )
+            break
 
     # gather stats from all processes
 

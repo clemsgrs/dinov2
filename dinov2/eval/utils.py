@@ -170,21 +170,25 @@ class EarlyStoppingDINO:
         self,
         tracking: str,
         min_max: str,
-        patience: int = 20,
-        min_epoch: int = 50,
+        nepochs: int,
+        patience_pct: int = 0.2,
+        min_epoch_pct: int = 0.3,
         checkpoint_dir: Optional[Path] = None,
         verbose: bool = False,
     ):
         """
         Args:
-            patience (int): How long to wait after last time validation loss improved.
-            min_epoch (int): Earliest epoch possible for stopping
+            tracking (str): Metric to track for early stopping
+            min_max (str): Whether to minimize or maximize the tracking metric
+            nepochs (int): Total number of epochs
+            patience_pct (int): Percentage of epochs to wait before early stopping
+            min_epoch_pct (int): Percentage of epochs to wait before enabling early stopping
             verbose (bool): If True, prints a message for each validation loss improvement
         """
         self.tracking = tracking
         self.min_max = min_max
-        self.patience = patience
-        self.min_epoch = min_epoch
+        self.patience = int(round(patience_pct * nepochs, 0))
+        self.min_epoch = int(round(min_epoch_pct * nepochs, 0))
         self.checkpoint_dir = checkpoint_dir
         self.verbose = verbose
 
