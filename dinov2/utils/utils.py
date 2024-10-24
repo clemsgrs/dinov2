@@ -128,8 +128,9 @@ def initialize_wandb(
     cfg: DictConfig,
     key: Optional[str] = "",
 ):
-    command = f"wandb login {key}"
-    subprocess.call(command, shell=True)
+    if not key:
+        key = input("Enter your W&B API key: ")
+    wandb.login(key=key)
     if cfg.wandb.tags is None:
         tags = []
     else:
