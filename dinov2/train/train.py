@@ -73,7 +73,7 @@ def build_schedulers(cfg, OFFICIAL_EPOCH_LENGTH):
         base_value=cfg.optim["lr"],
         final_value=cfg.optim["min_lr"],
         total_iters=cfg.optim["epochs"] * OFFICIAL_EPOCH_LENGTH,
-        warmup_iters=int(round(cfg.optim["warmup_pct"] * cfg.optim["epochs"], 0)) * OFFICIAL_EPOCH_LENGTH,
+        warmup_iters=int(round(cfg.optim["warmup_pct"] * cfg.optim["epochs"] * OFFICIAL_EPOCH_LENGTH, 0)),
         start_warmup_value=0,
     )
     wd = dict(
@@ -89,8 +89,8 @@ def build_schedulers(cfg, OFFICIAL_EPOCH_LENGTH):
     teacher_temp = dict(
         base_value=cfg.teacher["teacher_temp"],
         final_value=cfg.teacher["teacher_temp"],
-        total_iters=int(round(cfg.teacher["warmup_teacher_temp_pct"] * cfg.optim["epochs"], 0)) * OFFICIAL_EPOCH_LENGTH,
-        warmup_iters=int(round(cfg.teacher["warmup_teacher_temp_pct"] * cfg.optim["epochs"], 0))
+        total_iters=int(round(cfg.teacher["warmup_teacher_temp_pct"] * cfg.optim["epochs"] * OFFICIAL_EPOCH_LENGTH, 0)),
+        warmup_iters=int(round(cfg.teacher["warmup_teacher_temp_pct"] * cfg.optim["epochs"] * OFFICIAL_EPOCH_LENGTH, 0))
         * OFFICIAL_EPOCH_LENGTH,
         start_warmup_value=cfg.teacher["warmup_teacher_temp"],
     )
@@ -102,7 +102,7 @@ def build_schedulers(cfg, OFFICIAL_EPOCH_LENGTH):
     last_layer_lr_schedule = CosineScheduler(**lr)
 
     last_layer_lr_schedule.schedule[
-        : int(round(cfg.optim["freeze_last_layer_pct"] * cfg.optim["epochs"], 0)) * OFFICIAL_EPOCH_LENGTH
+        : int(round(cfg.optim["freeze_last_layer_pct"] * cfg.optim["epochs"] * OFFICIAL_EPOCH_LENGTH, 0))
     ] = 0  # mimicking the original schedules
 
     logger.info("Schedulers ready.")
