@@ -90,8 +90,9 @@ def build_schedulers(cfg, OFFICIAL_EPOCH_LENGTH):
         base_value=cfg.teacher["teacher_temp"],
         final_value=cfg.teacher["teacher_temp"],
         total_iters=int(round(cfg.teacher["warmup_teacher_temp_pct"] * cfg.optim["epochs"] * OFFICIAL_EPOCH_LENGTH, 0)),
-        warmup_iters=int(round(cfg.teacher["warmup_teacher_temp_pct"] * cfg.optim["epochs"] * OFFICIAL_EPOCH_LENGTH, 0))
-        * OFFICIAL_EPOCH_LENGTH,
+        warmup_iters=int(
+            round(cfg.teacher["warmup_teacher_temp_pct"] * cfg.optim["epochs"] * OFFICIAL_EPOCH_LENGTH, 0)
+        ),
         start_warmup_value=cfg.teacher["warmup_teacher_temp"],
     )
 
@@ -183,7 +184,7 @@ def do_tune(
     # student = student.to(torch.device(f"cuda:{distributed.get_global_rank()}"))
     # teacher = teacher.to(torch.device(f"cuda:{distributed.get_global_rank()}"))
     if verbose:
-        tqdm.tqdm.write(f"Loading epoch {iteration} weights...")
+        tqdm.tqdm.write(f"Loading iteration {iteration} weights...")
     student_weights = model.student.state_dict()
     teacher_weights = model.teacher.state_dict()
     student_msg = load_weights(student, student_weights)
@@ -348,8 +349,12 @@ def do_train(cfg, model, resume=False):
 
     # setup tuning data
 
-    if cfg.tune.tune_every:
-        transform = make_classification_eval_transform(image_size=cfg.crops.global_crops_size)
+    tune_every_iter = None
+    if cfg.tune.tune_every_pct:
+        tune_every_iter = int(round(cfg.tune.tune_every_pct * OFFICIAL_EPOCH_LENGTH, 0))
+
+    if tune_every_iter:
+        transform = make_classification_eval_transform(image_size=cfg.tune.tile_size)
         query_dataset_str = cfg.tune.query_dataset_path
         test_dataset_str = cfg.tune.test_dataset_path
 
@@ -489,7 +494,7 @@ def do_train(cfg, model, resume=False):
             # optionally run tuning
             # only run tuning on rank 0, otherwise one has to take care of gathering knn metrics from multiple gpus
             tune_results = None
-            if cfg.tune.tune_every and epoch % cfg.tune.tune_every == 0:
+            if tune_every_iter and iteration % tune_every_iter == 0:
                 tune_results = do_tune(
                     cfg,
                     iteration,

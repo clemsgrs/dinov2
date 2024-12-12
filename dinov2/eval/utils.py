@@ -128,7 +128,7 @@ def extract_features_with_dataloader(
     gather_device = torch.device("cpu") if gather_on_cpu else torch.device("cuda")
     metric_logger = MetricLogger(delimiter="  ", verbose=verbose)
     features, all_labels = None, None
-    for samples, (index, labels_rank) in metric_logger.log_every(data_loader, 10, gpu_id, header):
+    for samples, (index, labels_rank) in metric_logger.log_every(data_loader, gpu_id, 10, header):
         samples = samples.cuda(non_blocking=True)
         labels_rank = labels_rank.cuda(non_blocking=True)
         index = index.cuda(non_blocking=True)

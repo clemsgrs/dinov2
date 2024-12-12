@@ -71,6 +71,7 @@ tune:
   tune_every: # run tuning every x% of an epoch, leave empty to disable tuning
   query_dataset_path:
   test_dataset_path:
+  tile_size: 256
   early_stopping:
     enable: false
     tracking: "auc_20"

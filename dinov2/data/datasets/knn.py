@@ -46,6 +46,7 @@ class KNNDataset(ExtendedVisionDataset):
         self,
         *,
         root: str,
+        extra: str,
         subset: Optional["KNNDataset.Subset"] = None,
         split: Optional["KNNDataset.Split"] = None,
         transforms: Optional[Callable] = None,
@@ -54,6 +55,7 @@ class KNNDataset(ExtendedVisionDataset):
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
         self._subset = subset
+        self.extra = extra
         self._split = split
         self._get_entries()
         self._get_filepaths()
@@ -91,14 +93,14 @@ class KNNDataset(ExtendedVisionDataset):
         self._entries = self._load_entries(self._entries_name)
 
     def _load_entries(self, _entries_name: str) -> np.ndarray:
-        entries_path = Path(self.root, _entries_name)
+        entries_path = Path(self.extra, _entries_name)
         return np.load(entries_path, mmap_mode="r")
 
     def _get_filepaths(self) -> np.ndarray:
         self._filepaths = self._load_filepaths(self._file_indices_name)
 
     def _load_filepaths(self, _file_indices_name: str) -> np.ndarray:
-        file_indices_path = Path(self.root, _file_indices_name)
+        file_indices_path = Path(self.extra, _file_indices_name)
         return np.load(file_indices_path, allow_pickle=True).item()
 
     def _get_mmap_tarball(self) -> mmap:
@@ -112,7 +114,7 @@ class KNNDataset(ExtendedVisionDataset):
         self._class_ids = self._load_class_ids(self._class_ids_name)
 
     def _load_class_ids(self, _class_ids_name: str) -> np.ndarray:
-        class_ids_path = Path(self.root, _class_ids_name)
+        class_ids_path = Path(self.extra, _class_ids_name)
         return np.load(class_ids_path, allow_pickle=True)
 
     def get_image_data(self, index: int) -> bytes:
