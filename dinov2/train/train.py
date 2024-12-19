@@ -389,7 +389,6 @@ def do_train(cfg, model, resume=False):
     metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
     metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file)
     log_freq = 10  # log_freq has to be smaller than the window_size used with instantiating SmoothedValue (here and in MetricLogger)
-    header = "Train"
 
     forward_backward_time = SmoothedValue(fmt="{avg:.6f}")
 
@@ -397,7 +396,7 @@ def do_train(cfg, model, resume=False):
         data_loader,
         distributed.get_global_rank(),
         log_freq,
-        header,
+        "Train",
         max_iter,
         start_iter,
     ):
@@ -468,55 +467,43 @@ def do_train(cfg, model, resume=False):
         metric_logger.update(current_batch_size=current_batch_size)
         metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
 
-        # logging
-        if distributed.is_main_process() and cfg.wandb.enable:
-            log_dict = {"iteration": iteration}
-            update_log_dict(log_dict, f"{header.lower()}/lr", lr, step="iteration")
-            update_log_dict(log_dict, f"{header.lower()}/wd", wd, step="iteration")
-            update_log_dict(log_dict, f"{header.lower()}/loss", losses_reduced, step="iteration")
-            for loss_name, loss_value in loss_dict.items():
-                update_log_dict(log_dict, f"{header.lower()}/{loss_name}", loss_value, step="iteration")
-            wandb.log(log_dict, step=iteration)
-
         epoch = iteration // OFFICIAL_EPOCH_LENGTH
 
-        # addtional logging at the end of each epoch
-        if iteration % OFFICIAL_EPOCH_LENGTH == 0:
-            if distributed.is_main_process() and cfg.wandb.enable:
-                # log the total loss and each individual loss to wandb
-                log_dict = {"epoch": epoch}
-                update_log_dict(log_dict, f"{header.lower()}/lr", lr, step="epoch")
-                update_log_dict(log_dict, f"{header.lower()}/wd", wd, step="epoch")
-                update_log_dict(log_dict, f"{header.lower()}/loss", losses_reduced, step="epoch")
-                for loss_name, loss_value in loss_dict.items():
-                    update_log_dict(log_dict, f"{header.lower()}/{loss_name}", loss_value, step="epoch")
+        # logging
+        if distributed.is_main_process() and cfg.wandb.enable:
+            log_dict = {"iteration": iteration, "epoch": epoch}
+            update_log_dict(log_dict, "train/lr", lr, step="iteration")
+            update_log_dict(log_dict, "train/wd", wd, step="iteration")
+            update_log_dict(log_dict, "train/loss", losses_reduced, step="iteration")
+            for loss_name, loss_value in loss_dict.items():
+                update_log_dict(log_dict, f"train/{loss_name}", loss_value, step="iteration")
 
-            # optionally run tuning
+        # optionally run tuning
+        tune_results = None
+        if distributed.is_main_process() and tune_every_iter and iteration % tune_every_iter == 0:
             # only run tuning on rank 0, otherwise one has to take care of gathering knn metrics from multiple gpus
-            tune_results = None
-            if tune_every_iter and iteration % tune_every_iter == 0:
-                tune_results = do_tune(
-                    cfg,
-                    iteration,
-                    model,
-                    query_dataset,
-                    test_dataset,
-                    results_save_dir,
-                    verbose=False,
-                )
+            tune_results = do_tune(
+                cfg,
+                iteration,
+                model,
+                query_dataset,
+                test_dataset,
+                results_save_dir,
+                verbose=False,
+            )
 
-                if distributed.is_main_process() and cfg.wandb.enable:
-                    for model_name, metrics_dict in tune_results.items():
-                        for name, value in metrics_dict.items():
-                            update_log_dict(log_dict, f"tune/{model_name}.{name}", value, step="epoch")
+            if cfg.wandb.enable:
+                for model_name, metrics_dict in tune_results.items():
+                    for name, value in metrics_dict.items():
+                        update_log_dict(log_dict, f"tune/{model_name}.{name}", value, step="iteration")
 
             early_stopper(epoch, tune_results, periodic_checkpointer, run_distributed, iteration)
             if early_stopper.early_stop and cfg.tune.early_stopping.enable:
                 stop = True
 
-            # log to wandb
-            if distributed.is_main_process() and cfg.wandb.enable:
-                wandb.log(log_dict, step=epoch)
+        # log to wandb
+        if distributed.is_main_process() and cfg.wandb.enable:
+            wandb.log(log_dict, step=iteration)
 
         # checkpointing and testing
 

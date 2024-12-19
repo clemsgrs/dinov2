@@ -68,7 +68,7 @@ train:
   centering: "centering" # or "sinkhorn_knopp"
   save_frequency: 0.1 # save every x% of an epoch
 tune:
-  tune_every: # run tuning every x% of an epoch, leave empty to disable tuning
+  tune_every_pct: # run tuning every x% of an epoch, leave empty to disable tuning (1 = every epoch)
   query_dataset_path:
   test_dataset_path:
   tile_size: 256
